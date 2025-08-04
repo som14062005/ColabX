@@ -1,4 +1,4 @@
-import SimpleAbi from "../backend/artifacts/contracts/Simple.sol/Simple.json";
+import SimpleAbi from "../blockchain/artifacts/contracts/Log.sol/Log.json";
 
 export const CONTRACT_ABI = SimpleAbi.abi; 
 
