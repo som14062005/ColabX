@@ -6,7 +6,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "somu": "npx hardhat run scripts/deploy.js --network sepolia",
-    "export-abi": "ts-node scripts/export-abi.js"
+    "export-abi": "node scripts/export-abi.js"
   },
   "keywords": [],
   "author": "",
