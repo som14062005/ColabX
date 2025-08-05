@@ -1,10 +1,18 @@
-import { ethers } from "ethers";
-import { CONTRACT_ABI, CONTRACT_ADDRESS } from "../constants";
-import SignupPage from "./SignupPage.jsx";
+import React from "react";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import SignupPage from "./SignupPage";
+import Login from "./Login";
 
 function App() {
   return (
-    <SignupPage/>
+    <Router>
+      <Routes>
+        <Route path="/" element={<SignupPage />} />
+        <Route path="/signup" element={<SignupPage />} />
+        <Route path="/login" element={<Login />} />
+        {/* You can add dashboard route later */}
+      </Routes>
+    </Router>
   );
 }
 
