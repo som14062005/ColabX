@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom"; // 🚀 Import for routing
+import { useNavigate } from "react-router-dom";
 import { FaEye, FaEyeSlash, FaTimes } from "react-icons/fa";
 
 function SignupPage() {
-  const navigate = useNavigate(); // 🚀 Used to redirect
+  const navigate = useNavigate();
+
   const [form, setForm] = useState({
     username: "",
     displayName: "",
@@ -21,19 +22,7 @@ function SignupPage() {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setForm((f) => ({ ...f, [name]: value }));
-  };
-
-  const addSkill = (skill) => {
-    if (!skill) return;
-    setForm((f) => {
-      if (f.skills.includes(skill)) return f;
-      return { ...f, skills: [...f.skills, skill] };
-    });
-  };
-
-  const removeSkill = (skill) => {
-    setForm((f) => ({ ...f, skills: f.skills.filter((s) => s !== skill) }));
+    setForm((prev) => ({ ...prev, [name]: value }));
   };
 
   const validate = () => {
@@ -47,13 +36,65 @@ function SignupPage() {
     return errs;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const v = validate();
     setErrors(v);
     if (Object.keys(v).length) return;
-    console.log("Submitting", form);
-    alert("Signup submitted (stub). Wire to backend.");
+
+    try {
+      const response = await fetch("http://localhost:3000/auth/signup", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          username: form.username,
+          displayName: form.displayName,
+          email: form.email,
+          password: form.password,
+          skills: form.skills,
+          github: form.github,
+          bio: form.bio,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        // 👇 Check for MongoDB duplicate key error
+        if (data.message && data.message.includes("duplicate key error")) {
+          alert("Username or email already exists. Please choose another.");
+        } else {
+          throw new Error(data.message || "Signup failed");
+        }
+        return;
+      }
+
+      sessionStorage.setItem("token", data.token);
+      sessionStorage.setItem("user", JSON.stringify(data.user));
+
+      navigate("/dashboard");
+    } catch (error) {
+      // 👇 Catch unexpected errors
+      if (error.message.includes("duplicate key error")) {
+        alert("Username or email already exists. Please choose another.");
+      } else {
+        alert(error.message || "An error occurred during signup");
+      }
+    }
+  };
+
+  const addSkill = (skill) => {
+    if (!skill) return;
+    setForm((f) => {
+      if (f.skills.includes(skill)) return f;
+      return { ...f, skills: [...f.skills, skill] };
+    });
+  };
+
+  const removeSkill = (skill) => {
+    setForm((f) => ({ ...f, skills: f.skills.filter((s) => s !== skill) }));
   };
 
   return (
@@ -101,7 +142,7 @@ function SignupPage() {
             {errors.email && <p className="text-xs text-red-500">{errors.email}</p>}
           </div>
 
-          {/* Password */}
+          {/* Password and Confirm Password */}
           <div className="flex gap-4">
             <div className="flex-1 relative">
               <label className="text-sm text-gray-300">Password</label>
@@ -138,11 +179,13 @@ function SignupPage() {
               >
                 {showConfirm ? <FaEyeSlash /> : <FaEye />}
               </button>
-              {errors.confirmPassword && <p className="text-xs text-red-500">{errors.confirmPassword}</p>}
+              {errors.confirmPassword && (
+                <p className="text-xs text-red-500">{errors.confirmPassword}</p>
+              )}
             </div>
           </div>
 
-          {/* Short Bio */}
+          {/* Bio */}
           <div>
             <label className="text-sm text-gray-300">Short Bio</label>
             <textarea
@@ -192,7 +235,7 @@ function SignupPage() {
             </div>
           </div>
 
-          {/* GitHub link */}
+          {/* GitHub */}
           <div>
             <label className="text-sm text-gray-300">GitHub Profile (optional)</label>
             <input
