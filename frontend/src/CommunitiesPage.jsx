@@ -19,28 +19,32 @@ const CommunitiesPage = () => {
   ]);
   const [joinedCommunities, setJoinedCommunities] = useState([communities[0].name]);
   const [currentCommunity, setCurrentCommunity] = useState(communities[0]);
-  const [view, setView] = useState('community'); // community | search | create
+  const [view, setView] = useState('community');
   const [searchQuery, setSearchQuery] = useState('');
-  const [newPost, setNewPost] = useState('');
+  const [newPostTitle, setNewPostTitle] = useState('');
+  const [newPostContent, setNewPostContent] = useState('');
   const [newComment, setNewComment] = useState({});
   const [newCommunity, setNewCommunity] = useState({ name: '', description: '', rules: '' });
   const [pendingJoinCommunity, setPendingJoinCommunity] = useState(null);
+  const [showPostModal, setShowPostModal] = useState(false);
   const [username] = useState('pranaav');
 
   const handlePost = () => {
-    if (!newPost.trim()) return;
+    if (!newPostTitle.trim() || !newPostContent.trim()) return;
     const updatedCommunities = communities.map(c => {
       if (c.name === currentCommunity.name) {
         return {
           ...c,
-          posts: [...c.posts, { user: username, text: newPost, comments: [] }]
+          posts: [...c.posts, { user: username, title: newPostTitle, content: newPostContent, comments: [] }]
         };
       }
       return c;
     });
     setCommunities(updatedCommunities);
     setCurrentCommunity(updatedCommunities.find(c => c.name === currentCommunity.name));
-    setNewPost('');
+    setNewPostTitle('');
+    setNewPostContent('');
+    setShowPostModal(false);
   };
 
   const handleComment = (postIndex) => {
@@ -92,8 +96,7 @@ const CommunitiesPage = () => {
   };
 
   return (
-    <div className="flex h-screen bg-[#0D0D0D] text-white">
-      {/* Sidebar */}
+    <div className="flex h-screen bg-[#0D0D0D] text-white relative">
       <div className="w-20 bg-[#1A1A1A] flex flex-col items-center p-4 space-y-6">
         <div className="text-lg font-bold"><CgProfile /></div>
         {joinedCommunities.map(name => (
@@ -116,27 +119,17 @@ const CommunitiesPage = () => {
         </button>
       </div>
 
-      {/* Main Content */}
       <div className="flex-1 overflow-y-auto p-6">
         {view === 'community' && (
           <div>
             <h2 className="text-2xl font-bold mb-4">{currentCommunity.name}</h2>
             <p className="text-[#B3B3B3] mb-6">{currentCommunity.description}</p>
 
-            {/* New Post */}
-            <textarea
-              value={newPost}
-              onChange={e => setNewPost(e.target.value)}
-              placeholder="Write a post..."
-              className="w-full p-3 bg-[#1A1A1A] rounded mb-2 text-white"
-            />
-            <button onClick={handlePost} className="bg-[#A259FF] px-4 py-2 rounded mb-4">Post</button>
-
-            {/* Posts */}
             {currentCommunity.posts.map((post, i) => (
               <div key={i} className="bg-[#1A1A1A] p-4 mb-4 rounded">
                 <div className="font-semibold mb-1">{post.user}</div>
-                <div>{post.text}</div>
+                <div className="font-bold text-lg">{post.title}</div>
+                <div className="mb-2">{post.content}</div>
                 <div className="mt-2">
                   {post.comments.map((comment, ci) => (
                     <div key={ci} className="ml-4 mt-1 text-sm text-[#B3B3B3]">
@@ -158,6 +151,10 @@ const CommunitiesPage = () => {
                 </div>
               </div>
             ))}
+
+            <button onClick={() => setShowPostModal(true)} className="fixed bottom-6 right-6 bg-[#A259FF] rounded-full p-4 shadow-lg">
+              <FaPlus className="text-white" />
+            </button>
           </div>
         )}
 
@@ -220,7 +217,6 @@ const CommunitiesPage = () => {
           </div>
         )}
 
-        {/* Join Rules Popup */}
         {pendingJoinCommunity && (
           <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center">
             <div className="bg-[#1A1A1A] p-6 rounded w-full max-w-md">
@@ -229,6 +225,30 @@ const CommunitiesPage = () => {
               <div className="flex justify-end space-x-4">
                 <button onClick={() => confirmJoin(false)} className="text-[#EF4444]">Reject</button>
                 <button onClick={() => confirmJoin(true)} className="bg-[#A259FF] px-4 py-1 rounded">Accept</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showPostModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
+            <div className="bg-[#1A1A1A] p-6 rounded w-full max-w-lg">
+              <h3 className="text-xl font-bold mb-4">Create Post</h3>
+              <input
+                value={newPostTitle}
+                onChange={e => setNewPostTitle(e.target.value)}
+                placeholder="Post Title"
+                className="w-full p-3 mb-2 bg-[#0D0D0D] rounded text-white"
+              />
+              <textarea
+                value={newPostContent}
+                onChange={e => setNewPostContent(e.target.value)}
+                placeholder="Post Content"
+                className="w-full p-3 mb-4 bg-[#0D0D0D] rounded text-white"
+              />
+              <div className="flex justify-end space-x-4">
+                <button onClick={() => setShowPostModal(false)} className="text-[#EF4444]">Cancel</button>
+                <button onClick={handlePost} className="bg-[#A259FF] px-4 py-2 rounded">Post</button>
               </div>
             </div>
           </div>
