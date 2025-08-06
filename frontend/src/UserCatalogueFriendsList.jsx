@@ -7,6 +7,13 @@ const usersData = [
   { username: "david", skills: ["JavaScript", "HTML"] },
 ];
 
+const csSkills = [
+  "React", "JavaScript", "HTML", "CSS", "Node.js", "Python", "Java", 
+  "C++", "C#", "TypeScript", "Angular", "Vue.js", "PHP", "Ruby", 
+  "Go", "Rust", "Swift", "Kotlin", "Solidity", "Blockchain", 
+  "Machine Learning", "Data Science", "DevOps", "AWS", "Docker"
+];
+
 export default function UserCatalogueFriendsList() {
   const [searchUsername, setSearchUsername] = useState("");
   const [searchSkill, setSearchSkill] = useState("");
@@ -59,13 +66,25 @@ export default function UserCatalogueFriendsList() {
                 onChange={(e) => setSearchUsername(e.target.value)}
                 className="bg-[#1A1A1A] border border-[#333] text-white p-3 rounded w-full placeholder-[#B3B3B3] focus:outline-none focus:ring-2 focus:ring-[#A259FF]"
               />
-              <input
-                type="text"
-                placeholder="Filter by skill"
+              <select
                 value={searchSkill}
                 onChange={(e) => setSearchSkill(e.target.value)}
-                className="bg-[#1A1A1A] border border-[#333] text-white p-3 rounded w-full placeholder-[#B3B3B3] focus:outline-none focus:ring-2 focus:ring-[#A259FF]"
-              />
+                className="bg-[#1A1A1A] border border-[#333] text-white p-3 rounded w-full focus:outline-none focus:ring-2 focus:ring-[#A259FF] appearance-none cursor-pointer"
+                style={{
+                  backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23B3B3B3' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e")`,
+                  backgroundPosition: 'right 0.5rem center',
+                  backgroundRepeat: 'no-repeat',
+                  backgroundSize: '1.5em 1.5em',
+                  paddingRight: '2.5rem'
+                }}
+              >
+                <option value="" style={{ color: '#B3B3B3' }}>Filter by CS skill</option>
+                {csSkills.map((skill) => (
+                  <option key={skill} value={skill} className="bg-[#1A1A1A] text-white">
+                    {skill}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="grid gap-4">
