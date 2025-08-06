@@ -7,7 +7,7 @@ const Login = () => {
   const handleLogin = (e) => {
     e.preventDefault();
     // Add authentication logic here later
-    navigate('/dashboard'); // You can change this route as per your project
+    navigate('/main'); // You can change this route as per your project
   };
 
   return (

@@ -1,0 +1,19 @@
+.gradient-text {
+  background: radial-gradient(circle, #7182ff 0%, #3cff52 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-size: 200%;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: left center;
+  }
+  100% {
+    background-position: right center;
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 3s ease-in-out infinite alternate;
+}
