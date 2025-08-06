@@ -5,8 +5,10 @@ import Login from "./Login";
 import HostProject from "./HostProject";
 import UserCatalogueFriendsList from "./UserCatalogueFriendsList";
 import CommunitiesPage from "./CommunitiesPage";
+import { abi , contract } from "./contract.json";
 
 function App() {
+
   return (
     <Router>
       <Routes>
