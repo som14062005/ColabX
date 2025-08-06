@@ -4,7 +4,7 @@ import SignupPage from "./SignupPage";
 import Login from "./Login";
 import HostProject from "./HostProject";
 import UserCatalogueFriendsList from "./userCatalogueFriendsList";
-
+import CommunitiesPage from "./CommunitiesPage";
 
 function App() {
   return (
@@ -14,6 +14,7 @@ function App() {
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/login" element={<Login />} />
         <Route path="/devs" element={<UserCatalogueFriendsList />} />
+        <Route path="/community" element={<CommunitiesPage />} />
         {/* You can add dashboard route later */}
       </Routes>
     </Router>
