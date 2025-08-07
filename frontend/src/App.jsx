@@ -7,6 +7,7 @@ import UserCatalogueFriendsList from "./UserCatalogueFriendsList";
 import CommunitiesPage from "./CommunitiesPage";
 import { abi , contract } from "./contract.json";
 import MainPage from "./MainPage";
+import ProjectCard from "./ProjectCard";
 
 function App() {
 
@@ -19,6 +20,7 @@ function App() {
         <Route path="/devs" element={<UserCatalogueFriendsList />} />
         <Route path="/community" element={<CommunitiesPage />} />
         <Route path="/main" element={<MainPage/>} />
+        <Route path="/projects" element={<ProjectCard />} />
         {/* You can add dashboard route later */}
       </Routes>
     </Router>
