@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom"; // 🚀 Import for routing
+import { useNavigate } from "react-router-dom";
 import { FaEye, FaEyeSlash, FaTimes } from "react-icons/fa";
 
 function SignupPage() {
-  const navigate = useNavigate(); // 🚀 Used to redirect
+  const navigate = useNavigate();
+
   const [form, setForm] = useState({
     username: "",
     displayName: "",
@@ -47,14 +48,34 @@ function SignupPage() {
     return errs;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const v = validate();
     setErrors(v);
     if (Object.keys(v).length) return;
-    console.log("Submitting", form);
-    alert("Signup submitted (stub). Wire to backend.");
-    navigate("/main");
+
+    try {
+      const response = await fetch("http://localhost:3000/auth/signup", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(form),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        alert(data.message || "Signup failed");
+        return;
+      }
+
+      alert("Signup successful!");
+      navigate("/login");
+    } catch (error) {
+      console.error("Signup error:", error);
+      alert("Something went wrong. Try again.");
+    }
   };
 
   return (
