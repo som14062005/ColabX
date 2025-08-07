@@ -5,6 +5,7 @@ import Login from "./Login";
 import HostProject from "./HostProject";
 import UserCatalogueFriendsList from "./UserCatalogueFriendsList";
 import CommunitiesPage from "./CommunitiesPage";
+import MainPage from "./MainPage";
 
 function App() {
   return (
@@ -15,6 +16,7 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/devs" element={<UserCatalogueFriendsList />} />
         <Route path="/community" element={<CommunitiesPage />} />
+        <Route path="/main" element={<MainPage/>} />
         {/* You can add dashboard route later */}
       </Routes>
     </Router>
