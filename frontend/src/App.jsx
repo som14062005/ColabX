@@ -8,7 +8,7 @@ import CommunitiesPage from "./CommunitiesPage";
 import { abi , contract } from "./contract.json";
 import MainPage from "./MainPage";
 import ProjectCard from "./ProjectCard";
-
+import Profile from "./Profile";
 function App() {
 
   return (
@@ -21,7 +21,7 @@ function App() {
         <Route path="/community" element={<CommunitiesPage />} />
         <Route path="/main" element={<MainPage/>} />
         <Route path="/projects" element={<ProjectCard />} />
-        {/* You can add dashboard route later */}
+        <Route path="/profile" element={<Profile />} />
       </Routes>
     </Router>
   );
