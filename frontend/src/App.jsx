@@ -5,12 +5,13 @@ import Login from "./Login";
 import HostProject from "./HostProject";
 import UserCatalogueFriendsList from "./UserCatalogueFriendsList";
 import CommunitiesPage from "./CommunitiesPage";
-import { abi , contract } from "./contract.json";
+import { abi, contract } from "./contract.json";
 import MainPage from "./MainPage";
 import ProjectCard from "./ProjectCard";
+import WorkspaceHub from "./WorkspaceHub"; // ✅ New import
+import Whiteboard from "./Whiteboard";
 
 function App() {
-
   return (
     <Router>
       <Routes>
@@ -19,9 +20,12 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/devs" element={<UserCatalogueFriendsList />} />
         <Route path="/community" element={<CommunitiesPage />} />
-        <Route path="/main" element={<MainPage/>} />
+        <Route path="/main" element={<MainPage />} />
         <Route path="/projects" element={<ProjectCard />} />
-        {/* You can add dashboard route later */}
+        <Route path="/host-project" element={<HostProject />} /> {/* ✅ Host project route */}
+        <Route path="/workspace" element={<WorkspaceHub />} /> {/* ✅ Workspace route */}
+        <Route path="/whiteboard" element={<Whiteboard />} />
+        {/* Add more feature routes here if needed */}
       </Routes>
     </Router>
   );
