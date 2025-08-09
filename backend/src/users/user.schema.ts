@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
+import * as mongoose from 'mongoose'; // ✅ This import is required
 
 export type UserDocument = User & Document;
 
@@ -25,6 +26,10 @@ export class User {
 
   @Prop()
   bio: string;
+
+ @Prop({ type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], default: [] })
+friends: mongoose.Types.ObjectId[];
+// ✅ Use ObjectId[] for Mongo references
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

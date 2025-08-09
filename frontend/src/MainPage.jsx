@@ -1,13 +1,14 @@
 import React from "react";
-
-// ✅ Import your assets
 import project from "./assets/project.png";
 import profileImg from "./assets/profile.png";
 import devsImg from "./assets/devs.png";
 import commuImg from "./assets/commu.png";
-import './MainPage.css'; // if you are using custom CSS
+import './MainPage.css';
+import { Link } from "react-router-dom";
 
 const MainPage = () => {
+  const username = sessionStorage.getItem("username"); // ✅ get username
+
   return (
     <div className="min-h-screen bg-[#0D0D0D] text-white flex flex-col">
       {/* Header */}
@@ -17,11 +18,16 @@ const MainPage = () => {
           <button className="text-gray-400 hover:text-white">
             <i className="fas fa-bell"></i>
           </button>
-          <img
-            src={profileImg}
-            alt="User Avatar"
-            className="w-10 h-10 rounded-full"
-          />
+
+          {/* ✅ Username + Avatar */}
+          <div className="flex items-center space-x-2">
+            {username && <span className="text-sm text-gray-300">{username}</span>}
+            <img
+              src={profileImg}
+              alt="User Avatar"
+              className="w-10 h-10 rounded-full"
+            />
+          </div>
         </div>
       </header>
 
@@ -39,7 +45,7 @@ const MainPage = () => {
       {/* Main Options Grid */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 px-8 mt-12">
         {/* Projects */}
-       <div className="bg-[#1A1A1A] p-6 rounded-2xl shadow hover:shadow-lg hover:scale-105 transition-all duration-300 text-center">
+        <div className="bg-[#1A1A1A] p-6 rounded-2xl shadow hover:shadow-lg hover:scale-105 transition-all duration-300 text-center">
           <img
             src={project}
             alt="Project"
@@ -47,11 +53,9 @@ const MainPage = () => {
           />
           <h3 className="font-semibold text-lg">Project</h3>
           <p className="text-[#B3B3B3] text-sm mt-2">
-            
-    Manage your ongoing projects and contributions.
+            Manage your ongoing projects and contributions.
           </p>
         </div>
-
 
         {/* Profile */}
         <div className="bg-[#1A1A1A] p-6 rounded-2xl shadow hover:shadow-lg hover:scale-105 transition-all duration-300 text-center">
@@ -67,17 +71,19 @@ const MainPage = () => {
         </div>
 
         {/* Devs */}
-        <div className="bg-[#1A1A1A] p-6 rounded-2xl shadow hover:shadow-lg hover:scale-105 transition-all duration-300 text-center">
-          <img
-            src={devsImg}
-            alt="Devs"
-            className="w-full h-58 object-cover rounded-xl mx-auto mb-4"
-          />
-          <h3 className="font-semibold text-lg">Devs</h3>
-          <p className="text-[#B3B3B3] text-sm mt-2">
-            Discover and connect with other developers.
-          </p>
-        </div>
+        <Link to="/devs">
+          <div className="bg-[#1A1A1A] p-6 rounded-2xl shadow hover:shadow-lg hover:scale-105 transition-all duration-300 text-center cursor-pointer">
+            <img
+              src={devsImg}
+              alt="Devs"
+              className="w-full h-58 object-cover rounded-xl mx-auto mb-4"
+            />
+            <h3 className="font-semibold text-lg">Devs</h3>
+            <p className="text-[#B3B3B3] text-sm mt-2">
+              Discover and connect with other developers.
+            </p>
+          </div>
+        </Link>
 
         {/* Communities */}
         <div className="bg-[#1A1A1A] p-6 rounded-2xl shadow hover:shadow-lg hover:scale-105 transition-all duration-300 text-center">

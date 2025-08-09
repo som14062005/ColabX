@@ -11,32 +11,39 @@ const Login = () => {
   };
 
   const handleLogin = async (e) => {
-    e.preventDefault();
-    try {
-      const response = await fetch("http://localhost:3000/auth/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(form),
-      });
+  e.preventDefault();
+  try {
+    const response = await fetch("http://localhost:3000/auth/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(form),
+    });
 
-      const data = await response.json();
+    const data = await response.json();
 
-      if (!response.ok) {
-        alert(data.message || "Login failed");
-        return;
-      }
-
-      // Optionally store token
-      localStorage.setItem("token", data.token); // if your backend sends a JWT
-      alert("Login successful!");
-      navigate("/main");
-    } catch (error) {
-      console.error("Login error:", error);
-      alert("Something went wrong.");
+    if (!response.ok) {
+      alert(data.message || "Login failed");
+      return;
     }
-  };
+
+    // ✅ Store token and user ID correctly
+    sessionStorage.setItem("token", data.token);
+    sessionStorage.setItem("userId", data.user.id);
+    sessionStorage.setItem("username", data.user.username); // <-- add this
+    console.log("Token:", sessionStorage.getItem("token"));
+console.log("UserId:", sessionStorage.getItem("userId"));
+console.log("Username:", sessionStorage.getItem("username"));
+
+    alert("Login successful!");
+    navigate("/main");
+  } catch (error) {
+    console.error("Login error:", error);
+    alert("Something went wrong.");
+  }
+};
+
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-900 text-white">
