@@ -8,8 +8,9 @@ import CommunitiesPage from "./CommunitiesPage";
 import { abi, contract } from "./contract.json";
 import MainPage from "./MainPage";
 import ProjectCard from "./ProjectCard";
-import WorkspaceHub from "./WorkspaceHub"; // ✅ New import
 import Whiteboard from "./Whiteboard";
+import WorkspaceHub from "./WorkspaceHub"; // ✅ New import // ✅ New import
+import Profile from "./Profile";
 
 function App() {
   return (
@@ -26,6 +27,8 @@ function App() {
         <Route path="/workspace" element={<WorkspaceHub />} /> {/* ✅ Workspace route */}
         <Route path="/whiteboard" element={<Whiteboard />} />
         {/* Add more feature routes here if needed */}
+        <Route path="/profile" element={<Profile />} />
+
       </Routes>
     </Router>
   );
