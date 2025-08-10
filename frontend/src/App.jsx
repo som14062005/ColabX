@@ -19,19 +19,6 @@ import Notification from "./Notification"; // ✅ New Notification page
 
 function App() {
   return (
-    <Router>
-      <Routes>
-        <Route path="/" element={<SignupPage />} />
-        <Route path="/signup" element={<SignupPage />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/devs" element={<UserCatalogueFriendsList />} />
-        <Route path="/community" element={<CommunitiesPage />} />
-        <Route path="/main" element={<MainPage/>} />
-        <Route path="/projects" element={<ProjectCard />} />
-        <Route path="/profile" element={<Profile />} />
-        <Route path="/git" element={<CommitGraphReactFlow owner="som14062005" repo="NAMMA_THA" branch="main" token="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" maxCommitsPerBranch={80}/>} />
-      </Routes>
-    </Router>
     <React.Fragment>
       <Router>
         <Routes>
@@ -45,7 +32,7 @@ function App() {
           <Route path="/host-project" element={<HostProject />} /> {/* ✅ Host project route */}
           <Route path="/workspace" element={<WorkspaceHub />} /> {/* ✅ Workspace route */}
           <Route path="/whiteboard" element={<Whiteboard />} />
-          {/* Add more feature routes here if needed */}
+          <Route path="/git" element={<CommitGraphReactFlow owner="som14062005" repo="NAMMA_THA" branch="main" token="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" maxCommitsPerBranch={80}/>} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/notifications" element={<Notification />} /> {/* ✅ New Notification route */}
         </Routes>
