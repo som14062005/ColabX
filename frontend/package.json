@@ -10,7 +10,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@gitgraph/react": "^1.6.0",
     "axios": "^1.11.0",
+    "dagre": "^0.8.5",
+    "dotenv": "^17.2.1",
     "chart.js": "^4.5.0",
     "ethers": "^6.15.0",
     "lucide-react": "^0.536.0",
@@ -21,7 +24,8 @@
     "react-router-dom": "^7.7.1",
     "react-select": "^5.10.2",
     "react-selector": "^0.0.5",
-    "react-toastify": "^11.0.5"
+    "react-toastify": "^11.0.5",
+    "reactflow": "^11.11.4"
   },
   "devDependencies": {
     "@eslint/js": "^9.30.1",

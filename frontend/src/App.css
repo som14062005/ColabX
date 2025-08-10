@@ -40,3 +40,24 @@
 .read-the-docs {
   color: #888;
 }
+
+.node {
+  background-color: #1e1e1e; /* Dark background */
+  color: #fff; /* White text */
+  border-radius: 8px;
+  padding: 10px;
+  overflow-wrap: break-word; /* Allow text to wrap */
+  white-space: normal;
+  border: 1px solid #444; /* Subtle dark border */
+}
+
+.canvas {
+  background-color: #121212; /* Pure dark mode */
+}
+
+.tag {
+  border-radius: 5px;
+  padding: 2px 6px;
+  font-size: 0.85rem;
+  display: inline-block;
+}
