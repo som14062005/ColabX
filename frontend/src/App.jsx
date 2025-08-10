@@ -9,34 +9,43 @@ import { abi, contract } from "./contract.json";
 import MainPage from "./MainPage";
 import ProjectCard from "./ProjectCard";
 import Whiteboard from "./Whiteboard";
-import WorkspaceHub from "./WorkspaceHub"; // ✅ New import // ✅ New import
+import WorkspaceHub from "./WorkspaceHub";
 import Profile from "./Profile";
-import { useFriend } from "./context/FriendContext";
-import FriendRequestPopup from "./FriendRequestPopup";
-import { FriendProvider } from "./context/FriendContext";
-import Notification from "./Notification"; // ✅ New Notification page
+import Notification from "./Notification";
+
+// New imports for dashboard & subpages
+import ProjectDashboard from "./ProjectDashboard/ProjectDashboard";
+import TasksLead from "./ProjectDashboard/LeadTasksPage";
+import TasksMember from "./ProjectDashboard/MemberTaskPage";
+
 
 function App() {
   return (
-    <React.Fragment>
-      <Router>
-        <Routes>
-          <Route path="/" element={<SignupPage />} />
-          <Route path="/signup" element={<SignupPage />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/devs" element={<UserCatalogueFriendsList />} />
-          <Route path="/community" element={<CommunitiesPage />} />
-          <Route path="/main" element={<MainPage />} />
-          <Route path="/projects" element={<ProjectCard />} />
-          <Route path="/host-project" element={<HostProject />} /> {/* ✅ Host project route */}
-          <Route path="/workspace" element={<WorkspaceHub />} /> {/* ✅ Workspace route */}
-          <Route path="/whiteboard" element={<Whiteboard />} />
-          {/* Add more feature routes here if needed */}
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/notifications" element={<Notification />} /> {/* ✅ New Notification route */}
-        </Routes>
-      </Router>
-    </React.Fragment>
+    <Router>
+      <Routes>
+        {/* Auth */}
+        <Route path="/" element={<SignupPage />} />
+        <Route path="/signup" element={<SignupPage />} />
+        <Route path="/login" element={<Login />} />
+
+        {/* Main features */}
+        <Route path="/devs" element={<UserCatalogueFriendsList />} />
+        <Route path="/community" element={<CommunitiesPage />} />
+        <Route path="/main" element={<MainPage />} />
+        <Route path="/projects" element={<ProjectCard />} />
+        <Route path="/host-project" element={<HostProject />} />
+        <Route path="/workspace" element={<WorkspaceHub />} />
+        <Route path="/whiteboard" element={<Whiteboard />} />
+        <Route path="/profile" element={<Profile />} />
+        <Route path="/notifications" element={<Notification />} />
+
+        {/* Project Dashboard and its features */}
+        <Route path="/project-dashboard" element={<ProjectDashboard />} />
+        <Route path="/tasks-lead" element={<TasksLead />} />
+        <Route path="/tasks-member" element={<TasksMember />} />
+       
+      </Routes>
+    </Router>
   );
 }
 
