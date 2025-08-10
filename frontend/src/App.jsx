@@ -12,11 +12,13 @@ import WorkspaceHub from "./WorkspaceHub";
 import Profile from "./Profile";
 import CommitGraphReactFlow from "./CommitGraphReactFlow";
 import Notification from "./Notification";
+import CodeEditor from "./CodeEditor";
 
 // New imports for dashboard & subpages
 import ProjectDashboard from "./ProjectDashboard/ProjectDashboard";
 import TasksLead from "./ProjectDashboard/LeadTasksPage";
 import TasksMember from "./ProjectDashboard/MemberTaskPage";
+import IssueBoard from "./IssueBoard";
 
 
 function App() {
@@ -40,7 +42,8 @@ function App() {
           <Route path="/project-dashboard" element={<ProjectDashboard />} />
           <Route path="/tasks-lead" element={<TasksLead />} />
           <Route path="/tasks-member" element={<TasksMember />} />
-        
+          <Route path="/issues" element={<IssueBoard />} />
+          <Route path="/code" element={<CodeEditor/>} />
         </Routes>
       </Router>
     </React.Fragment>
