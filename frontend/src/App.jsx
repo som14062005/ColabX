@@ -11,10 +11,14 @@ import ProjectCard from "./ProjectCard";
 import Whiteboard from "./Whiteboard";
 import WorkspaceHub from "./WorkspaceHub";
 import Profile from "./Profile";
-import { useFriend } from "./context/FriendContext";
-import FriendRequestPopup from "./FriendRequestPopup";
-import { FriendProvider } from "./context/FriendContext";
-import Notification from "./Notification"; // ✅ New Notification page
+import CommitGraphReactFlow from "./CommitGraphReactFlow";
+import Notification from "./Notification";
+
+// New imports for dashboard & subpages
+import ProjectDashboard from "./ProjectDashboard/ProjectDashboard";
+import TasksLead from "./ProjectDashboard/LeadTasksPage";
+import TasksMember from "./ProjectDashboard/MemberTaskPage";
+
 
 function App() {
   return (
@@ -31,7 +35,7 @@ function App() {
           <Route path="/host-project" element={<HostProject />} /> {/* ✅ Host project route */}
           <Route path="/workspace" element={<WorkspaceHub />} /> {/* ✅ Workspace route */}
           <Route path="/whiteboard" element={<Whiteboard />} />
-          {/* Add more feature routes here if needed */}
+          <Route path="/git" element={<CommitGraphReactFlow owner="som14062005" repo="NAMMA_THA" branch="main" maxCommitsPerBranch={80}/>} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/notifications" element={<Notification />} /> {/* ✅ New Notification route */}
         </Routes>
