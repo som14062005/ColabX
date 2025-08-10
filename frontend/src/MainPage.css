@@ -1,3 +1,35 @@
+/* .gradient-text {
+  background: radial-gradient(circle, #7182ff 0%, #3cff52 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-size: 200%;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: left center;
+  }
+  100% {
+    background-position: right center;
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 3s ease-in-out infinite alternate;
+}
+
+
+.card-glow {
+  border: 2px solid transparent;
+  transition: border-color 0.3s ease-in-out, box-shadow 0.3s ease-in-out;
+}
+
+.card-glow:hover {
+  border-color: #A259FF;
+  box-shadow: 0 0 12px rgba(162, 89, 255, 0.6);
+}
+*/
+
 .gradient-text {
   background: radial-gradient(circle, #7182ff 0%, #3cff52 100%);
   -webkit-background-clip: text;
@@ -16,4 +48,19 @@
 
 .animate-shimmer {
   animation: shimmer 3s ease-in-out infinite alternate;
+}
+
+.card-glow {
+  border: 2px solid transparent;
+  transition: border-color 0.3s ease-in-out, box-shadow 0.3s ease-in-out;
+}
+
+.card-glow:hover {
+  border-color: #a259ff;
+  box-shadow: 0 0 12px rgba(162, 89, 255, 0.6);
+}
+
+/* Ensure text is above Vanta background */
+.z-10 {
+  z-index: 10;
 }
