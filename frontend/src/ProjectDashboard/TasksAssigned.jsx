@@ -1,7 +1,7 @@
 // src/pages/projectDashboard/TasksAssigned.jsx
 import React from "react";
 import LeadTasksPage from "./LeadTasksPage";
-import MemberTasksPage from "./MemberTasksPage";
+import MemberTasksPage from "./MemberTaskPage";
 
 export default function TasksAssigned({ role }) {
   return (

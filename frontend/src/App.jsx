@@ -9,13 +9,16 @@ import { abi, contract } from "./contract.json";
 import MainPage from "./MainPage";
 import ProjectCard from "./ProjectCard";
 import Whiteboard from "./Whiteboard";
-import WorkspaceHub from "./WorkspaceHub"; // ✅ New import // ✅ New import
+import WorkspaceHub from "./WorkspaceHub";
 import Profile from "./Profile";
 import CommitGraphReactFlow from "./CommitGraphReactFlow";
-import { useFriend } from "./context/FriendContext";
-import FriendRequestPopup from "./FriendRequestPopup";
-import { FriendProvider } from "./context/FriendContext";
-import Notification from "./Notification"; // ✅ New Notification page
+import Notification from "./Notification";
+
+// New imports for dashboard & subpages
+import ProjectDashboard from "./ProjectDashboard/ProjectDashboard";
+import TasksLead from "./ProjectDashboard/LeadTasksPage";
+import TasksMember from "./ProjectDashboard/MemberTaskPage";
+
 
 function App() {
   return (
@@ -35,6 +38,10 @@ function App() {
           <Route path="/git" element={<CommitGraphReactFlow owner="som14062005" repo="NAMMA_THA" branch="main" maxCommitsPerBranch={80}/>} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/notifications" element={<Notification />} /> {/* ✅ New Notification route */}
+          <Route path="/project-dashboard" element={<ProjectDashboard />} />
+          <Route path="/tasks-lead" element={<TasksLead />} />
+          <Route path="/tasks-member" element={<TasksMember />} />
+        
         </Routes>
       </Router>
     </React.Fragment>
