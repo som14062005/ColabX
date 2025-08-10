@@ -9,6 +9,7 @@ import ReactFlow, {
 import "reactflow/dist/style.css";
 import dagre from "dagre";
 
+const token = import.meta.env.VITE_GITHUB_TOKEN;
 const NODE_WIDTH = 260;
 const NODE_HEIGHT = null; // taller to fit tags nicely
 
@@ -18,8 +19,8 @@ dagreGraph.setDefaultEdgeLabel(() => ({}));
 function getDagreLayout(reactFlowNodes, reactFlowEdges, direction = "TB") {
   dagreGraph.setGraph({
     rankdir: direction,
-    nodesep: 40,
-    ranksep: 100
+    nodesep: 80,
+    ranksep: 200
   });
 
   reactFlowNodes.forEach((node) => {
@@ -65,7 +66,6 @@ function colorForBranch(branchName) {
 export default function CommitGraphReactFlow({
   owner,
   repo,
-  token,
   maxCommitsPerBranch = 120,
 }) {
   const [loading, setLoading] = useState(true);
