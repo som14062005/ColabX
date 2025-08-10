@@ -38,6 +38,10 @@ function App() {
           <Route path="/git" element={<CommitGraphReactFlow owner="som14062005" repo="NAMMA_THA" branch="main" maxCommitsPerBranch={80}/>} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/notifications" element={<Notification />} /> {/* ✅ New Notification route */}
+          <Route path="/project-dashboard" element={<ProjectDashboard />} />
+          <Route path="/tasks-lead" element={<TasksLead />} />
+          <Route path="/tasks-member" element={<TasksMember />} />
+        
         </Routes>
       </Router>
     </React.Fragment>
