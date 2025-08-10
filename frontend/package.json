@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@gitgraph/react": "^1.6.0",
+    "@hello-pangea/dnd": "^18.0.1",
     "axios": "^1.11.0",
     "chart.js": "^4.5.0",
     "dagre": "^0.8.5",
