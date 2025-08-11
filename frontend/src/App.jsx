@@ -19,6 +19,7 @@ import ProjectDashboard from "./ProjectDashboard/ProjectDashboard";
 import TasksLead from "./ProjectDashboard/LeadTasksPage";
 import TasksMember from "./ProjectDashboard/MemberTaskPage";
 import IssueBoard from "./IssueBoard";
+import TeamProgress from "./projectpage/TeamProgress";
 
 
 function App() {
@@ -44,6 +45,7 @@ function App() {
           <Route path="/tasks-member" element={<TasksMember />} />
           <Route path="/issues" element={<IssueBoard />} />
           <Route path="/code" element={<CodeEditor/>} />
+          <Route path="/team-progress" element={<TeamProgress />} />
         </Routes>
       </Router>
     </React.Fragment>
