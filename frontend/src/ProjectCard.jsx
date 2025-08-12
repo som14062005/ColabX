@@ -753,42 +753,90 @@ export default function ProjectCard() {
 
       <div style={{ padding: "2rem" }}>
         {activeTab === "Projects" && (
-          <>
-            <h2 style={{ fontSize: "2rem", marginBottom: "0.5rem", fontFamily: "monospace" }}><b>PROJECTS</b></h2>
-            <p style={{ marginBottom: "2rem", color: "#aaa" }}>
-              Manage and track your development projects
-            </p>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "1.5rem" }}>
-              {projects.map((project) => (
-                <div
-                  key={project.id}
-                  style={{
-                    backgroundColor: "#16161a",
-                    border: "1px solid #2c2c34",
-                    borderRadius: "10px",
-                    width: "280px",
-                    padding: "1rem",
-                    transition: "box-shadow 0.3s",
-                    cursor: "pointer",
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 0 10px #a259ff")}
-                  onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "none")}
-                >
-                  <div style={{ fontWeight: "bold", fontSize: "1rem", marginBottom: "0.5rem", color: "#a259ff" }}>
-                    {project.title}
-                  </div>
-                  <div style={{ fontSize: "0.9rem", color: "#ccc", marginBottom: "1rem" }}>
-                    {project.description.substring(0, 100)}...
-                  </div>
-                  <div style={{ fontSize: "0.8rem", color: "#888" }}>
-                    <div>Status: {project.status}</div>
-                    <div>Updated: {project.updated}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
+  <>
+    <h2 style={{ fontSize: "2rem", marginBottom: "0.5rem", fontFamily: "monospace" }}>
+      <b>PROJECTS</b>
+    </h2>
+    <p style={{ marginBottom: "2rem", color: "#aaa" }}>
+      Manage and track your development projects
+    </p>
+    <div style={{ display: "flex", flexWrap: "wrap", gap: "1.5rem" }}>
+      {projects.map((project) => (
+        <div
+          key={project.id}
+          style={{
+            backgroundColor: "#16161a",
+            border: "1px solid #2c2c34",
+            borderRadius: "10px",
+            width: "280px",
+            padding: "1rem",
+            transition: "box-shadow 0.3s",
+            cursor: "pointer",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 0 10px #a259ff")}
+          onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "none")}
+        >
+          <div style={{ fontWeight: "bold", fontSize: "1rem", marginBottom: "0.5rem", color: "#a259ff" }}>
+            {project.title}
+          </div>
+          <div style={{ fontSize: "0.9rem", color: "#ccc", marginBottom: "1rem" }}>
+            {project.description.substring(0, 100)}...
+          </div>
+          <div style={{ fontSize: "0.8rem", color: "#888", marginBottom: "0.75rem" }}>
+            <div>Status: {project.status}</div>
+            <div>Updated: {project.updated}</div>
+          </div>
+
+          {/* ✅ Show Add to Profile Button if Completed */}
+          {project.status === "Completed" && !project.addedToProfile && (
+            <button
+              onClick={() => {
+                setProjects(prev =>
+                  prev.map(p =>
+                    p.id === project.id ? { ...p, addedToProfile: true } : p
+                  )
+                );
+                alert(`${project.title} has been added to your profile!`);
+              }}
+              style={{
+                backgroundColor: "#22c55e",
+                border: "none",
+                padding: "6px 12px",
+                borderRadius: "6px",
+                color: "white",
+                fontSize: "0.8rem",
+                fontWeight: "500",
+                cursor: "pointer"
+              }}
+            >
+              Add to Profile
+            </button>
+          )}
+
+          {/* ✅ Show Disabled Button after added */}
+          {project.status === "Completed" && project.addedToProfile && (
+            <button
+              disabled
+              style={{
+                backgroundColor: "#444",
+                border: "none",
+                padding: "6px 12px",
+                borderRadius: "6px",
+                color: "#ccc",
+                fontSize: "0.8rem",
+                fontWeight: "500",
+                cursor: "not-allowed"
+              }}
+            >
+              Added
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  </>
+)}
+
 
         {activeTab === "Host a project" && (
           <div style={{

@@ -17,7 +17,7 @@ import Notification from "./Notification";
 import ProjectDashboard from "./ProjectDashboard/ProjectDashboard";
 import TasksLead from "./ProjectDashboard/LeadTasksPage";
 import TasksMember from "./ProjectDashboard/MemberTaskPage";
-
+import DocumentationPage from "./ProjectDashboard/DocumentationPage"; // ✅ Documentation page
 
 function App() {
   return (
@@ -40,7 +40,7 @@ function App() {
           <Route path="/project-dashboard" element={<ProjectDashboard />} />
           <Route path="/tasks-lead" element={<TasksLead />} />
           <Route path="/tasks-member" element={<TasksMember />} />
-        
+          <Route path="/documentation/:projectId" element={<DocumentationPage />} /> {/* ✅ Documentation page route */}
         </Routes>
       </Router>
     </React.Fragment>
