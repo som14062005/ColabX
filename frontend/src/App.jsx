@@ -21,7 +21,7 @@ import TasksLead from "./ProjectDashboard/LeadTasksPage";
 import TasksMember from "./ProjectDashboard/MemberTaskPage";
 import IssueBoard from "./IssueBoard";
 import ChatRoom from "./ChatRoom";
-
+import DocumentationPage from "./ProjectDashboard/DocumentationPage"; // ✅ Documentation page
 
 function App() {
   return (
