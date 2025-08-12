@@ -20,6 +20,7 @@ import ProjectDashboard from "./ProjectDashboard/ProjectDashboard";
 import TasksLead from "./ProjectDashboard/LeadTasksPage";
 import TasksMember from "./ProjectDashboard/MemberTaskPage";
 import IssueBoard from "./IssueBoard";
+import ChatRoom from "./ChatRoom";
 
 
 function App() {
@@ -46,6 +47,7 @@ function App() {
           <Route path="/issues" element={<IssueBoard />} />
           <Route path="/code" element={<CodeEditor/>} />
           <Route path="/notes" element={<ProjectNotes />} />
+          <Route path="/chat" element={<ChatRoom />} />
         </Routes>
       </Router>
     </React.Fragment>
