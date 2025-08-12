@@ -13,6 +13,7 @@ import Profile from "./Profile";
 import CommitGraphReactFlow from "./CommitGraphReactFlow";
 import Notification from "./Notification";
 import CodeEditor from "./CodeEditor";
+import ProjectNotes from "./ProjectNotes";
 
 // New imports for dashboard & subpages
 import ProjectDashboard from "./ProjectDashboard/ProjectDashboard";
@@ -44,6 +45,7 @@ function App() {
           <Route path="/tasks-member" element={<TasksMember />} />
           <Route path="/issues" element={<IssueBoard />} />
           <Route path="/code" element={<CodeEditor/>} />
+          <Route path="/notes" element={<ProjectNotes />} />
         </Routes>
       </Router>
     </React.Fragment>
