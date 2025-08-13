@@ -1,13 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Hash, Users, Send, Trash2 } from 'lucide-react';
+import { Plus, Hash, Users, Send, Trash2, ChevronDown, Code, FileText, CheckSquare, GitBranch, PenTool, MessageCircle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const ChatRoom = () => {
+  const navigate = useNavigate();
   const [channels, setChannels] = useState([
     { id: 1, name: 'general', type: 'text' },
     { id: 2, name: 'development', type: 'text' },
     { id: 3, name: 'design', type: 'text' }
   ]);
-  
   const [activeChannel, setActiveChannel] = useState(1);
   const [messages, setMessages] = useState({
     1: [
@@ -21,12 +22,23 @@ const ChatRoom = () => {
       { id: 1, user: 'Diana', content: 'Updated the mockups, check them out!', timestamp: new Date(Date.now() - 3600000) }
     ]
   });
-  
   const [currentMessage, setCurrentMessage] = useState('');
   const [showAddChannel, setShowAddChannel] = useState(false);
   const [newChannelName, setNewChannelName] = useState('');
   const [username, setUsername] = useState('You');
+  const [showWorkspaceDropdown, setShowWorkspaceDropdown] = useState(false);
   const messagesEndRef = useRef(null);
+  const dropdownRef = useRef(null);
+
+  // Workspace features data
+  const workspaceFeatures = [
+    { id: 'chatroom', name: 'Chat Room', icon: MessageCircle, isActive: true, route: '/chat' },
+    { id: 'code-editor', name: 'Code Editor', icon: Code, isActive: false, route: '/code' },
+    { id: 'notes', name: 'Notes', icon: FileText, isActive: false, route: '/notes' },
+    { id: 'issue-board', name: 'Issue Board', icon: CheckSquare, isActive: false, route: '/issues' },
+    { id: 'git-commits', name: 'Git Commits', icon: GitBranch, isActive: false, route: '/git' },
+    { id: 'whiteboard', name: 'Whiteboard', icon: PenTool, isActive: false, route: '/whiteboard' }
+  ];
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -35,6 +47,20 @@ const ChatRoom = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages, activeChannel]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setShowWorkspaceDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   const addChannel = () => {
     if (newChannelName.trim()) {
@@ -93,6 +119,14 @@ const ChatRoom = () => {
     }).format(timestamp);
   };
 
+  const handleWorkspaceFeatureClick = (feature) => {
+    if (!feature.isActive) {
+      // Navigate to the corresponding route
+      navigate(feature.route);
+    }
+    setShowWorkspaceDropdown(false);
+  };
+
   const activeChannelData = channels.find(c => c.id === activeChannel);
 
   return (
@@ -116,14 +150,100 @@ const ChatRoom = () => {
         borderRight: '1px solid rgba(255,255,255,0.1)',
         boxShadow: '4px 0 20px rgba(0,0,0,0.3)'
       }}>
-        {/* Server Header */}
+        {/* Server Header with Workspace Dropdown */}
         <div className="p-4 border-b border-gray-700 relative">
           <div className="absolute inset-0 bg-gradient-to-r from-purple-500/10 to-blue-500/10 rounded-t-lg"></div>
           <div className="relative">
-            <h1 className="text-lg font-bold text-white mb-1" style={{
-              textShadow: '0 2px 10px rgba(168,85,247,0.3)'
-            }}>Project Chat</h1>
-            <p className="text-sm" style={{ color: '#B3B3B3' }}>Team Workspace</p>
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <h1 className="text-lg font-bold text-white mb-1" style={{
+                  textShadow: '0 2px 10px rgba(168,85,247,0.3)'
+                }}>Project Chat</h1>
+                <p className="text-sm" style={{ color: '#B3B3B3' }}>Team Workspace</p>
+              </div>
+              
+              {/* Workspace Dropdown Button */}
+              <div className="relative" ref={dropdownRef}>
+                <button
+                  onClick={() => setShowWorkspaceDropdown(!showWorkspaceDropdown)}
+                  className="p-2.5 rounded-xl transition-all duration-300 hover:scale-110 active:scale-95 relative group"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(168,85,247,0.2) 0%, rgba(59,130,246,0.2) 100%)',
+                    border: '1px solid rgba(168,85,247,0.3)',
+                    boxShadow: showWorkspaceDropdown 
+                      ? '0 8px 32px rgba(168,85,247,0.4), inset 0 1px 0 rgba(255,255,255,0.1)' 
+                      : '0 4px 20px rgba(168,85,247,0.2)',
+                  }}
+                >
+                  <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                  <ChevronDown 
+                    size={18} 
+                    className={`transition-all duration-300 relative z-10 ${showWorkspaceDropdown ? 'rotate-180 text-purple-300' : 'text-white'}`}
+                  />
+                </button>
+
+                {/* Dropdown Menu */}
+                {showWorkspaceDropdown && (
+                  <div 
+                    className="absolute top-full right-0 mt-2 w-56 rounded-2xl overflow-hidden z-50 animate-in slide-in-from-top-2 duration-200"
+                    style={{
+                      background: 'linear-gradient(135deg, rgba(13,13,13,0.95) 0%, rgba(26,26,26,0.95) 100%)',
+                      border: '1px solid rgba(168,85,247,0.2)',
+                      boxShadow: '0 20px 40px rgba(0,0,0,0.6), 0 8px 32px rgba(168,85,247,0.1)',
+                      backdropFilter: 'blur(20px)',
+                    }}
+                  >
+                    <div className="p-2">
+                      <div className="text-xs font-semibold uppercase tracking-wider text-gray-400 px-3 py-2 mb-1">
+                        Workspace Features
+                      </div>
+                      {workspaceFeatures.map((feature, index) => {
+                        const Icon = feature.icon;
+                        return (
+                          <button
+                            key={feature.id}
+                            onClick={() => handleWorkspaceFeatureClick(feature)}
+                            className={`w-full flex items-center px-3 py-3 rounded-xl transition-all duration-200 group relative ${
+                              feature.isActive 
+                                ? 'cursor-default' 
+                                : 'hover:scale-[1.02] active:scale-[0.98] cursor-pointer'
+                            }`}
+                            style={{
+                              background: feature.isActive 
+                                ? 'linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)'
+                                : 'transparent',
+                              color: feature.isActive ? '#FFFFFF' : '#B3B3B3',
+                              boxShadow: feature.isActive ? '0 4px 20px rgba(124,58,237,0.4)' : 'none'
+                            }}
+                            onMouseEnter={(e) => {
+                              if (!feature.isActive) {
+                                e.target.style.background = 'linear-gradient(135deg, rgba(168,85,247,0.1) 0%, rgba(59,130,246,0.1) 100%)';
+                                e.target.style.color = '#FFFFFF';
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              if (!feature.isActive) {
+                                e.target.style.background = 'transparent';
+                                e.target.style.color = '#B3B3B3';
+                              }
+                            }}
+                          >
+                            {!feature.isActive && (
+                              <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                            )}
+                            <Icon size={18} className="mr-3 relative z-10" />
+                            <span className="text-sm font-medium relative z-10">{feature.name}</span>
+                            {feature.isActive && (
+                              <div className="ml-auto w-2 h-2 rounded-full bg-green-400 shadow-lg shadow-green-400/50 animate-pulse"></div>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 

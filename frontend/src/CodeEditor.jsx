@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import Editor from "@monaco-editor/react";
-import { Users, Plus, Upload, Trash2, Code, Wifi, WifiOff, Eye, Download, Settings, Terminal, AlertCircle } from "lucide-react";
+import { Users, Plus, Upload, Trash2, Code, Wifi, WifiOff, Eye, Download, Settings, Terminal, AlertCircle, ChevronDown, MessageCircle, FileText, CheckSquare, GitBranch, PenTool } from "lucide-react";
+import { useNavigate } from 'react-router-dom';
 
 export default function CollabWorkspace() {
+  const navigate = useNavigate();
   const [files, setFiles] = useState(new Map([
     ["index.js", "// Welcome to the collaborative workspace\nconsole.log('Hello, collaborative world!');\n"],
     ["README.md", "# Collaborative Workspace\n\nStart coding together in real-time!\n"],
@@ -17,6 +19,7 @@ export default function CollabWorkspace() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showPresence, setShowPresence] = useState(true);
   const [roomId, setRoomId] = useState("demo-room");
+  const [showWorkspaceDropdown, setShowWorkspaceDropdown] = useState(false);
   
   // WebSocket and collaboration refs
   const wsRef = useRef(null);
@@ -25,10 +28,21 @@ export default function CollabWorkspace() {
   const userColorRef = useRef(generateRandomColor());
   const reconnectTimeoutRef = useRef(null);
   const isUnmountingRef = useRef(false);
+  const dropdownRef = useRef(null);
   
   // Operation queue for handling conflicts
   const operationQueueRef = useRef([]);
   const isProcessingRef = useRef(false);
+
+  // Workspace features data
+  const workspaceFeatures = [
+    { id: 'chatroom', name: 'Chat Room', icon: MessageCircle, isActive: false, route: '/chat' },
+    { id: 'code-editor', name: 'Code Editor', icon: Code, isActive: true, route: '/code' },
+    { id: 'notes', name: 'Notes', icon: FileText, isActive: false, route: '/notes' },
+    { id: 'issue-board', name: 'Issue Board', icon: CheckSquare, isActive: false, route: '/issues' },
+    { id: 'git-commits', name: 'Git Commits', icon: GitBranch, isActive: false, route: '/git' },
+    { id: 'whiteboard', name: 'Whiteboard', icon: PenTool, isActive: false, route: '/whiteboard' }
+  ];
 
   // Generate a random color for the user
   function generateRandomColor() {
@@ -38,6 +52,28 @@ export default function CollabWorkspace() {
     ];
     return colors[Math.floor(Math.random() * colors.length)];
   }
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setShowWorkspaceDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  const handleWorkspaceFeatureClick = (feature) => {
+    if (!feature.isActive) {
+      // Navigate to the corresponding route
+      navigate(feature.route);
+    }
+    setShowWorkspaceDropdown(false);
+  };
 
   // WebSocket connection management with proper cleanup
   const connectWebSocket = useCallback(() => {
@@ -274,6 +310,7 @@ export default function CollabWorkspace() {
       }));
     }
   }, [roomId, username]); // Reconnect when room or username changes
+  
   const sendMessage = useCallback((message) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(message));
@@ -577,7 +614,184 @@ export default function CollabWorkspace() {
           padding: 20px;
           border-bottom: 1px solid #1e293b;
           position: relative;
+          z-index: 5;
+        }
+
+        .workspace-header {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          margin-bottom: 20px;
+          gap: 16px;
+        }
+
+        .workspace-title-section {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .workspace-title {
+          font-size: 18px;
+          font-weight: bold;
+          color: white;
+          margin-bottom: 4px;
+          text-shadow: 0 2px 10px rgba(168,85,247,0.3);
+          line-height: 1.2;
+        }
+
+        .workspace-subtitle {
+          font-size: 14px;
+          color: #B3B3B3;
+          line-height: 1.2;
+        }
+
+        .workspace-dropdown {
+          position: relative;
+          flex-shrink: 0;
+        }
+
+        .workspace-dropdown-button {
+          padding: 10px;
+          border-radius: 12px;
+          border: 1px solid rgba(168,85,247,0.3);
+          background: linear-gradient(135deg, rgba(168,85,247,0.2) 0%, rgba(59,130,246,0.2) 100%);
+          color: white;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.3s ease;
+          width: 40px;
+          height: 40px;
+          box-shadow: ${showWorkspaceDropdown 
+            ? '0 8px 32px rgba(168,85,247,0.4), inset 0 1px 0 rgba(255,255,255,0.1)' 
+            : '0 4px 20px rgba(168,85,247,0.2)'};
+        }
+
+        .workspace-dropdown-button:hover {
+          transform: scale(1.1);
+          background: linear-gradient(135deg, rgba(168,85,247,0.3) 0%, rgba(59,130,246,0.3) 100%);
+        }
+
+        .workspace-dropdown-button:active {
+          transform: scale(0.95);
+        }
+
+        .workspace-dropdown-chevron {
+          transition: all 0.3s ease;
+          ${showWorkspaceDropdown ? 'transform: rotate(180deg); color: #a855f7;' : ''}
+        }
+
+        .workspace-dropdown-menu {
+          position: absolute;
+          top: calc(100% + 12px);
+          right: 0;
+          width: 240px;
+          max-height: 400px;
+          background: linear-gradient(135deg, rgba(13,13,13,0.98) 0%, rgba(26,26,26,0.98) 100%);
+          border: 1px solid rgba(168,85,247,0.3);
+          border-radius: 16px;
+          box-shadow: 0 25px 50px rgba(0,0,0,0.8), 0 12px 40px rgba(168,85,247,0.2);
+          backdrop-filter: blur(24px);
+          padding: 8px;
+          z-index: 1000;
+          animation: slideIn 0.2s ease-out;
+          overflow: hidden;
+        }
+
+        @keyframes slideIn {
+          from {
+            opacity: 0;
+            transform: translateY(-12px) scale(0.95);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+
+        .workspace-dropdown-header {
+          font-size: 11px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.6px;
+          color: #94a3b8;
+          padding: 12px 16px 8px;
+          margin-bottom: 4px;
+        }
+
+        .workspace-dropdown-item {
+          display: flex;
+          align-items: center;
+          width: 100%;
+          padding: 12px 16px;
+          border-radius: 12px;
+          background: transparent;
+          border: none;
+          color: ${({ isActive }) => isActive ? '#FFFFFF' : '#B3B3B3'};
+          cursor: pointer;
+          transition: all 0.2s ease;
+          position: relative;
+          overflow: hidden;
+          ${({ isActive }) => isActive 
+            ? `background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
+               box-shadow: 0 4px 20px rgba(124,58,237,0.4);`
+            : ''
+          }
+        }
+
+        .workspace-dropdown-item:not(.active):hover {
+          background: linear-gradient(135deg, rgba(168,85,247,0.15) 0%, rgba(59,130,246,0.15) 100%);
+          color: #FFFFFF;
+          transform: scale(1.02);
+        }
+
+        .workspace-dropdown-item:not(.active):active {
+          transform: scale(0.98);
+        }
+
+        .workspace-dropdown-item.active {
+          cursor: default;
+        }
+
+        .workspace-dropdown-item::before {
+          content: '';
+          position: absolute;
+          inset: 0;
+          border-radius: 12px;
+          background: linear-gradient(135deg, rgba(255,255,255,0.08) 0%, transparent 100%);
+          opacity: 0;
+          transition: opacity 0.3s ease;
+        }
+
+        .workspace-dropdown-item:not(.active):hover::before {
+          opacity: 1;
+        }
+
+        .workspace-dropdown-icon {
+          margin-right: 12px;
+          position: relative;
           z-index: 1;
+          flex-shrink: 0;
+        }
+
+        .workspace-dropdown-text {
+          font-size: 14px;
+          font-weight: 500;
+          position: relative;
+          z-index: 1;
+          flex: 1;
+        }
+
+        .workspace-dropdown-indicator {
+          margin-left: 8px;
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: #10b981;
+          box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
+          animation: pulse 2s infinite;
+          flex-shrink: 0;
         }
         
         .connection-status {
@@ -656,7 +870,7 @@ export default function CollabWorkspace() {
           padding: 16px 20px;
           border-bottom: 1px solid #1e293b;
           position: relative;
-          z-index: 1;
+          z-index: 3;
         }
         
         .section-title {
@@ -689,6 +903,7 @@ export default function CollabWorkspace() {
           transition: all 0.2s;
           position: relative;
           overflow: hidden;
+          z-index: 1;
         }
         
         .btn::before {
@@ -715,7 +930,7 @@ export default function CollabWorkspace() {
           flex: 1;
           overflow-y: auto;
           position: relative;
-          z-index: 1;
+          z-index: 2;
         }
         
         .file-item {
@@ -780,7 +995,7 @@ export default function CollabWorkspace() {
           padding: 16px 20px;
           border-top: 1px solid #1e293b;
           position: relative;
-          z-index: 1;
+          z-index: 2;
         }
         
         .user-list {
@@ -890,7 +1105,7 @@ export default function CollabWorkspace() {
           align-items: center;
           justify-content: center;
           transition: all 0.2s;
-          z-index: 10;
+          z-index: 100;
         }
         
         .collapse-btn:hover {
@@ -917,6 +1132,8 @@ export default function CollabWorkspace() {
           align-items: center;
           gap: 6px;
           transition: all 0.2s;
+          position: relative;
+          z-index: 1;
         }
         
         .file-input-label:hover {
@@ -955,6 +1172,57 @@ export default function CollabWorkspace() {
         {!sidebarCollapsed && (
           <>
             <div className="sidebar-header">
+              {/* Workspace Header with Dropdown */}
+              <div className="workspace-header">
+                <div className="workspace-title-section">
+                  <h1 className="workspace-title">Code Editor</h1>
+                  <p className="workspace-subtitle">Collaborative Workspace</p>
+                </div>
+                
+                {/* Workspace Dropdown Button */}
+                <div className="workspace-dropdown" ref={dropdownRef}>
+                  <button
+                    onClick={() => setShowWorkspaceDropdown(!showWorkspaceDropdown)}
+                    className="workspace-dropdown-button"
+                  >
+                    <ChevronDown size={18} className="workspace-dropdown-chevron" />
+                  </button>
+
+                  {/* Dropdown Menu */}
+                  {showWorkspaceDropdown && (
+                    <div className="workspace-dropdown-menu">
+                      <div className="workspace-dropdown-header">
+                        Workspace Features
+                      </div>
+                      {workspaceFeatures.map((feature) => {
+                        const Icon = feature.icon;
+                        return (
+                          <button
+                            key={feature.id}
+                            onClick={() => handleWorkspaceFeatureClick(feature)}
+                            className={`workspace-dropdown-item ${feature.isActive ? 'active' : ''}`}
+                            style={{
+                              background: feature.isActive 
+                                ? 'linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)'
+                                : 'transparent',
+                              color: feature.isActive ? '#FFFFFF' : '#B3B3B3',
+                              boxShadow: feature.isActive ? '0 4px 20px rgba(124,58,237,0.4)' : 'none',
+                              cursor: feature.isActive ? 'default' : 'pointer'
+                            }}
+                          >
+                            <Icon size={18} className="workspace-dropdown-icon" />
+                            <span className="workspace-dropdown-text">{feature.name}</span>
+                            {feature.isActive && (
+                              <div className="workspace-dropdown-indicator"></div>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <input
                 type="text"
                 className="room-input"
