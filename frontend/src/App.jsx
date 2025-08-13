@@ -22,7 +22,6 @@ import TasksMember from "./ProjectDashboard/MemberTaskPage";
 import ProjectDetailsPage from "./projectone";
 import IssueBoard from "./IssueBoard";
 import ChatRoom from "./ChatRoom";
-import "./App.css"; // Assuming you have some global styles
 
 
 function App() {
