@@ -19,8 +19,10 @@ import UserProfile from "./profile_onchain_resume";
 import ProjectDashboard from "./ProjectDashboard/ProjectDashboard";
 import TasksLead from "./ProjectDashboard/LeadTasksPage";
 import TasksMember from "./ProjectDashboard/MemberTaskPage";
+import ProjectDetailsPage from "./projectone";
 import IssueBoard from "./IssueBoard";
 import ChatRoom from "./ChatRoom";
+import "./App.css"; // Assuming you have some global styles
 
 
 function App() {
@@ -42,6 +44,7 @@ function App() {
           <Route path="/project-dashboard" element={<ProjectDashboard />} />
           <Route path="/tasks-lead" element={<TasksLead />} />
           <Route path="/tasks-member" element={<TasksMember />} />
+          <Route path="/projects/:projectId" element={<ProjectDetailsPage />} />
           <Route path="/issues" element={<IssueBoard />} />
           <Route path="/code" element={<CodeEditor/>} />
           <Route path="/notes" element={<ProjectNotes />} />
