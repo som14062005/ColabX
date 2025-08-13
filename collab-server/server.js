@@ -78,6 +78,9 @@ wss.on('connection', (ws, req) => {
                 case 'cursor-position':
                     broadcastToRoom(message, ws);
                     break;
+                case 'request-file-content':
+                    handleFileContentRequest(message);
+                    break;
                 case 'file-created':
                     handleFileCreated(message);
                     break;
@@ -99,6 +102,32 @@ wss.on('connection', (ws, req) => {
         }
     });
 
+function handleFileContentRequest(message) {
+    try {
+        const { filename, userId } = message;
+        if (!currentRoom) return;
+
+        const room = rooms.get(currentRoom);
+        if (!room) return;
+
+        const content = room.files.get(filename);
+        if (content !== undefined) {
+            // Send the latest file content to the requesting user
+            const user = room.users.get(userId);
+            if (user && user.ws && user.ws.readyState === WebSocket.OPEN) {
+                user.ws.send(JSON.stringify({
+                    type: 'file-content',
+                    filename,
+                    content
+                }));
+                console.log(`📄 Sent file content for ${filename} to ${userId}`);
+            }
+        }
+    } catch (error) {
+        console.error('❌ Error in handleFileContentRequest:', error);
+    }
+}
+    
     // Handle user leaving
     function handleUserLeave(message) {
         console.log(`👋 User ${message.userId} explicitly leaving room ${currentRoom}`);
@@ -459,6 +488,8 @@ process.on('SIGTERM', () => {
         process.exit(0);
     });
 });
+
+
 
 process.on('SIGINT', () => {
     console.log('🛑 SIGINT received, shutting down gracefully');
