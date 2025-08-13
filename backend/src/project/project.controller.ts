@@ -8,103 +8,112 @@ import {
   Req,
   HttpException,
   HttpStatus,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { ProjectService } from './project.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CreateProjectDto } from './dto/create-project.dto';
 
 @Controller('projects')
-@UseGuards(JwtAuthGuard) // All routes require authentication using JWT
+@UseGuards(JwtAuthGuard)
 export class ProjectController {
   constructor(private readonly projectService: ProjectService) {}
 
-  // 1. Create a new project (Host a Project)
-  @Post()
-  async createProject(@Req() req, @Body() createProjectDto: CreateProjectDto) {
-    const userId = req.user.sub;
-    const project = await this.projectService.createProject(userId, createProjectDto);
-    return project;
+  // helper to support both req.user.userId and req.user.sub
+  private getUserIdFromReq(req: any): string {
+    return req.user?.userId || req.user?.sub || null;
   }
 
-  // 2. Get your projects:
-  // Projects you own and projects you joined (accepted)
+  @Post()
+  async createProject(@Req() req, @Body() createProjectDto: CreateProjectDto) {
+    const userId = this.getUserIdFromReq(req);
+    if (!userId) throw new UnauthorizedException('User ID missing');
+    return this.projectService.createProject(userId, createProjectDto);
+  }
+
   @Get('my')
   async getMyProjects(@Req() req) {
-    const userId = req.user.sub;
+    const userId = this.getUserIdFromReq(req);
+    if (!userId) throw new UnauthorizedException('User ID missing');
     return this.projectService.getMyProjects(userId);
   }
 
-  // 3. Get available projects to send join requests (exclude your own, exclude projects already joined/requested)
   @Get('available-to-join')
   async getAvailableProjects(@Req() req) {
-    const userId = req.user.sub;
+    const userId = this.getUserIdFromReq(req);
+    if (!userId) throw new UnauthorizedException('User ID missing');
     return this.projectService.getAvailableProjectsToJoin(userId);
   }
 
-  // 4. Send join request to a project
   @Post(':id/join-request')
   async sendJoinRequest(@Req() req, @Param('id') projectId: string) {
-    const userId = req.user.sub;
+    const userId = this.getUserIdFromReq(req);
+    if (!userId) throw new UnauthorizedException('User ID missing');
     try {
       await this.projectService.sendJoinRequest(userId, projectId);
       return { message: 'Join request sent successfully' };
     } catch (error) {
-      throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+      throw new HttpException(error.message || 'Bad Request', HttpStatus.BAD_REQUEST);
     }
   }
 
-  // 5. Get pending join requests for a project you own
   @Get(':id/join-requests')
   async getJoinRequests(@Req() req, @Param('id') projectId: string) {
-    const userId = req.user.sub;
-    // Confirm the user owns this project before returning requests
+    const userId = this.getUserIdFromReq(req);
+    if (!userId) throw new UnauthorizedException('User ID missing');
+
     const isOwner = await this.projectService.isProjectOwner(userId, projectId);
     if (!isOwner) {
       throw new HttpException('Forbidden', HttpStatus.FORBIDDEN);
     }
-
     return this.projectService.getPendingJoinRequests(projectId);
   }
 
-  // 6. Accept a join request
-  @Post(':id/join-requests/:requestId/accept')
+  @Post(':id/join-requests/:requestUserId/accept')
   async acceptJoinRequest(
     @Req() req,
     @Param('id') projectId: string,
-    @Param('requestId') requestId: string,
+    @Param('requestUserId') requestUserId: string,
   ) {
-    const userId = req.user.sub;
+    const userId = this.getUserIdFromReq(req);
+    if (!userId) throw new UnauthorizedException('User ID missing');
+
     const isOwner = await this.projectService.isProjectOwner(userId, projectId);
     if (!isOwner) {
       throw new HttpException('Forbidden', HttpStatus.FORBIDDEN);
     }
-
-    try {
-      await this.projectService.acceptJoinRequest(projectId, requestId);
-      return { message: 'Join request accepted' };
-    } catch (error) {
-      throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
-    }
+    await this.projectService.acceptJoinRequest(projectId, requestUserId, userId);
+    return { message: 'Join request accepted' };
   }
 
-  // 7. Reject a join request
-  @Post(':id/join-requests/:requestId/reject')
+  @Post(':id/join-requests/:requestUserId/reject')
   async rejectJoinRequest(
     @Req() req,
     @Param('id') projectId: string,
-    @Param('requestId') requestId: string,
+    @Param('requestUserId') requestUserId: string,
   ) {
-    const userId = req.user.sub;
+    const userId = this.getUserIdFromReq(req);
+    if (!userId) throw new UnauthorizedException('User ID missing');
+
     const isOwner = await this.projectService.isProjectOwner(userId, projectId);
     if (!isOwner) {
       throw new HttpException('Forbidden', HttpStatus.FORBIDDEN);
     }
+    await this.projectService.rejectJoinRequest(projectId, requestUserId, userId);
+    return { message: 'Join request rejected' };
+  }
 
-    try {
-      await this.projectService.rejectJoinRequest(projectId, requestId);
-      return { message: 'Join request rejected' };
-    } catch (error) {
-      throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
-    }
+  @Get('joined')
+  async getJoinedProjects(@Req() req) {
+    const userId = this.getUserIdFromReq(req);
+    if (!userId) throw new UnauthorizedException('User ID missing');
+    return this.projectService.getJoinedProjects(userId);
+  }
+
+  @Get('all')
+  async getAllProjects(@Req() req) {
+    const userId = this.getUserIdFromReq(req);
+    if (!userId) throw new UnauthorizedException('User ID missing');
+    return this.projectService.getAllProjectsForUser(userId);
   }
 }

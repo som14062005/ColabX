@@ -1,130 +1,261 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Project, ProjectDocument } from './schemas/project.schema';
-import { JoinRequest, JoinRequestDocument } from './schemas/join-request.schema';
 import { CreateProjectDto } from './dto/create-project.dto';
 
 @Injectable()
 export class ProjectService {
   constructor(
-    @InjectModel(Project.name) private projectModel: Model<ProjectDocument>,
-    @InjectModel(JoinRequest.name) private joinRequestModel: Model<JoinRequestDocument>,
+    @InjectModel(Project.name)
+    private readonly projectModel: Model<ProjectDocument>,
   ) {}
 
-  /** 1️⃣ Create (Host) a Project */
-  async createProject(ownerId: string, dto: CreateProjectDto) {
-    const created = new this.projectModel({
-      owner: new Types.ObjectId(ownerId),
-      name: dto.name,
-      description: dto.description,
-      githubLink: dto.githubLink || null,
-      techStack: dto.techStack || [],
-      requirements: dto.requirements || null,
-      difficulty: dto.difficulty || null,
-      members: [],
-    });
-    return created.save();
+  private normalizeUserId(userId: string) {
+    if (!userId) throw new BadRequestException('User ID missing');
+    if (!Types.ObjectId.isValid(userId))
+      throw new BadRequestException('Invalid user ID');
+    return new Types.ObjectId(userId);
   }
 
-  /** 2️⃣ Get My Projects (owned + joined accepted) */
+  async createProject(userId: string, createProjectDto: CreateProjectDto) {
+    const ownerId = this.normalizeUserId(userId);
+    const newProject = new this.projectModel({
+      ...createProjectDto,
+      owner: ownerId,
+      members: [],
+      joinRequests: [],
+    });
+    return newProject.save();
+  }
+
   async getMyProjects(userId: string) {
-    const owned = await this.projectModel.find({ owner: userId });
-    const joined = await this.projectModel.find({ members: userId });
+    const userObjectId = this.normalizeUserId(userId);
+
+    const owned = await this.projectModel.find({ owner: userObjectId }).exec();
+    const joined = await this.projectModel.find({ members: userObjectId }).exec();
 
     return { owned, joined };
   }
 
-  /** 3️⃣ Get Available Projects to Join */
   async getAvailableProjectsToJoin(userId: string) {
-    const allOtherProjects = await this.projectModel.find({
-      owner: { $ne: userId },
-      members: { $ne: userId },
-    });
+    const userObjectId = this.normalizeUserId(userId);
 
-    const myRequests = await this.joinRequestModel.find({
-      requester: userId,
-      status: { $in: ['pending', 'accepted'] },
-    });
-
-    const requestedProjectIds = myRequests.map(r => r.project.toString());
-
-    return allOtherProjects.map(project => ({
-      ...project.toObject(),
-      alreadyRequested: requestedProjectIds.includes(project.id), // ✅ use .id
-    }));
+    return this.projectModel
+      .find({
+        owner: { $ne: userObjectId },
+        members: { $ne: userObjectId },
+        'joinRequests.user': { $ne: userObjectId },
+      })
+      .exec();
   }
 
-  /** 🔹 Helper: Check if user is owner of project */
-  async isProjectOwner(userId: string, projectId: string) {
-    const project = await this.projectModel.findById(projectId);
-    if (!project) throw new NotFoundException('Project not found');
-    return project.owner.toString() === userId;
-  }
-
-  /** 4️⃣ Send Join Request */
   async sendJoinRequest(userId: string, projectId: string) {
-    const project = await this.projectModel.findById(projectId);
+    const userObjectId = this.normalizeUserId(userId);
+    if (!Types.ObjectId.isValid(projectId))
+      throw new BadRequestException('Invalid project ID');
+    const projectObjectId = new Types.ObjectId(projectId);
+
+    const project = await this.projectModel.findById(projectObjectId).exec();
     if (!project) throw new NotFoundException('Project not found');
 
-    if (project.owner.toString() === userId) {
-      throw new BadRequestException('You cannot join your own project');
-    }
-    if (project.members.some(m => m.toString() === userId)) {
-      throw new BadRequestException('You are already a member');
+    if (project.owner.equals(userObjectId)) {
+      throw new BadRequestException('Cannot request to join your own project');
     }
 
-    const existing = await this.joinRequestModel.findOne({
-      project: projectId,
-      requester: userId,
-      status: { $in: ['pending', 'accepted'] },
-    });
-    if (existing) throw new BadRequestException('Request already sent');
+    if (project.members.some((m) => m.equals(userObjectId))) {
+      throw new BadRequestException('Already a member of this project');
+    }
 
-    const joinRequest = new this.joinRequestModel({
-      project: projectId,
-      requester: userId,
+    if (project.joinRequests.some((jr) => jr.user.equals(userObjectId))) {
+      throw new BadRequestException(
+        'You have already sent a join request for this project',
+      );
+    }
+
+    project.joinRequests.push({
+      user: userObjectId,
       status: 'pending',
+      createdAt: new Date(),
+      updatedAt: new Date(),
     });
-    await joinRequest.save();
-    return joinRequest;
+    await project.save();
+
+    return { message: 'Join request sent successfully' };
   }
 
-  /** 5️⃣ Get Pending Join Requests for My Project */
+  async isProjectOwner(userId: string, projectId: string): Promise<boolean> {
+    const userObjectId = this.normalizeUserId(userId);
+    if (!Types.ObjectId.isValid(projectId)) return false;
+    const projectObjectId = new Types.ObjectId(projectId);
+
+    const project = await this.projectModel
+      .findOne({
+        _id: projectObjectId,
+        owner: userObjectId,
+      })
+      .exec();
+
+    return !!project;
+  }
+
   async getPendingJoinRequests(projectId: string) {
-    return this.joinRequestModel
-      .find({ project: projectId, status: 'pending' })
-      .populate('requester', 'username email');
+    if (!Types.ObjectId.isValid(projectId))
+      throw new BadRequestException('Invalid project ID');
+    const projectObjectId = new Types.ObjectId(projectId);
+
+    const project = await this.projectModel
+      .findById(projectObjectId)
+      .populate('joinRequests.user', 'name email')
+      .exec();
+    if (!project) throw new NotFoundException('Project not found');
+
+    return (project.joinRequests || []).filter(
+      (jr) => jr.status === 'pending',
+    );
   }
 
-  /** 6️⃣ Accept Join Request */
-  async acceptJoinRequest(projectId: string, requestId: string) {
-    const reqDoc = await this.joinRequestModel.findById(requestId);
-    if (!reqDoc) throw new NotFoundException('Join request not found');
-    if (reqDoc.project.toString() !== projectId) {
-      throw new BadRequestException('Request does not belong to this project');
+  async acceptJoinRequest(
+    projectId: string,
+    requestUserId: string,
+    actingUserId?: string,
+  ) {
+    if (!Types.ObjectId.isValid(projectId))
+      throw new BadRequestException('Invalid project ID');
+    if (!Types.ObjectId.isValid(requestUserId))
+      throw new BadRequestException('Invalid request user ID');
+
+    const projectObjectId = new Types.ObjectId(projectId);
+    const requestUserObjectId = new Types.ObjectId(requestUserId);
+
+    const project = await this.projectModel.findById(projectObjectId).exec();
+    if (!project) throw new NotFoundException('Project not found');
+
+    if (actingUserId) {
+      const actingObjectId = this.normalizeUserId(actingUserId);
+      if (!project.owner.equals(actingObjectId))
+        throw new ForbiddenException('Only project owner can accept requests');
     }
 
-    reqDoc.status = 'accepted';
-    await reqDoc.save();
+    const jrIndex = project.joinRequests.findIndex((jr) =>
+      jr.user.equals(requestUserObjectId),
+    );
+    if (jrIndex === -1)
+      throw new NotFoundException('Join request not found');
 
-    await this.projectModel.findByIdAndUpdate(projectId, {
-      $addToSet: { members: reqDoc.requester },
+    project.joinRequests[jrIndex].status = 'accepted';
+    project.joinRequests[jrIndex].updatedAt = new Date();
+
+    if (!project.members.some((m) => m.equals(requestUserObjectId))) {
+      project.members.push(requestUserObjectId);
+    }
+
+    await project.save();
+    return { message: 'Join request accepted' };
+  }
+
+  async rejectJoinRequest(
+    projectId: string,
+    requestUserId: string,
+    actingUserId?: string,
+  ) {
+    if (!Types.ObjectId.isValid(projectId))
+      throw new BadRequestException('Invalid project ID');
+    if (!Types.ObjectId.isValid(requestUserId))
+      throw new BadRequestException('Invalid request user ID');
+
+    const projectObjectId = new Types.ObjectId(projectId);
+    const requestUserObjectId = new Types.ObjectId(requestUserId);
+
+    const project = await this.projectModel.findById(projectObjectId).exec();
+    if (!project) throw new NotFoundException('Project not found');
+
+    if (actingUserId) {
+      const actingObjectId = this.normalizeUserId(actingUserId);
+      if (!project.owner.equals(actingObjectId))
+        throw new ForbiddenException('Only project owner can reject requests');
+    }
+
+    const jrIndex = project.joinRequests.findIndex((jr) =>
+      jr.user.equals(requestUserObjectId),
+    );
+    if (jrIndex === -1)
+      throw new NotFoundException('Join request not found');
+
+    project.joinRequests[jrIndex].status = 'rejected';
+    project.joinRequests[jrIndex].updatedAt = new Date();
+
+    await project.save();
+    return { message: 'Join request rejected' };
+  }
+
+  // ✅ FIXED: Get joined projects (user is member, owner is different)
+  async getJoinedProjects(userId: string) {
+    const userObjectId = this.normalizeUserId(userId);
+
+    const projects = await this.projectModel
+      .find({
+        members: userObjectId,
+        owner: { $ne: userObjectId },
+      })
+      .exec();
+
+    if (!projects.length) {
+      throw new NotFoundException('No joined projects found');
+    }
+
+    return projects;
+  }
+
+  async getAllUserProjects(userId: string) {
+    const userObjectId = this.normalizeUserId(userId);
+
+    const ownedProjects = await this.projectModel.find({
+      owner: userObjectId,
     });
 
-    return { message: 'Request accepted' };
+    const joinedProjects = await this.projectModel.find({
+      members: userObjectId,
+      owner: { $ne: userObjectId },
+    });
+
+    return [
+      ...ownedProjects.map((p) => ({ ...p.toObject(), role: 'owner' })),
+      ...joinedProjects.map((p) => ({ ...p.toObject(), role: 'member' })),
+    ];
   }
 
-  /** 7️⃣ Reject Join Request */
-  async rejectJoinRequest(projectId: string, requestId: string) {
-    const reqDoc = await this.joinRequestModel.findById(requestId);
-    if (!reqDoc) throw new NotFoundException('Join request not found');
-    if (reqDoc.project.toString() !== projectId) {
-      throw new BadRequestException('Request does not belong to this project');
-    }
+  private categorizeProjects(projects: any[], currentUserId: string) {
+    return projects.map((project) => {
+      let role = 'owner';
 
-    reqDoc.status = 'rejected';
-    await reqDoc.save();
-    return { message: 'Request rejected' };
+      if (project.owner?.toString() === currentUserId) {
+        role = 'owner';
+      } else if (
+        project.members?.some((m: string) => m.toString() === currentUserId)
+      ) {
+        role = 'member';
+      }
+
+      return {
+        ...project.toObject?.() ?? project,
+        role,
+      };
+    });
+  }
+
+  async getAllProjectsForUser(userId: string) {
+    const userObjectId = this.normalizeUserId(userId);
+
+    const projects = await this.projectModel.find({
+      $or: [{ owner: userObjectId }, { members: userObjectId }],
+    });
+
+    return this.categorizeProjects(projects, userId);
   }
 }

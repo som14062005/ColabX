@@ -570,5 +570,4 @@ const CommunitiesPage = () => {
     </div>
   );
 };
-
 export default CommunitiesPage;
