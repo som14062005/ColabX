@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import Select from "react-select";
-import UserProfile from './Profile'; // Make sure this path is correct
+import UserProfile from './profile_onchain_resume'; // Make sure this path is correct
 
 // Dummy user list for inviting members
 const dummyUsers = [
