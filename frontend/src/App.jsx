@@ -12,12 +12,17 @@ import WorkspaceHub from "./WorkspaceHub";
 import Profile from "./Profile";
 import CommitGraphReactFlow from "./CommitGraphReactFlow";
 import Notification from "./Notification";
+import CodeEditor from "./CodeEditor";
+import ProjectNotes from "./ProjectNotes";
 
 // New imports for dashboard & subpages
 import ProjectDashboard from "./ProjectDashboard/ProjectDashboard";
 import TasksLead from "./ProjectDashboard/LeadTasksPage";
 import TasksMember from "./ProjectDashboard/MemberTaskPage";
 import ProjectDetailsPage from "./projectone";
+import IssueBoard from "./IssueBoard";
+import ChatRoom from "./ChatRoom";
+import "./App.css"; // Assuming you have some global styles
 
 
 function App() {
@@ -42,6 +47,10 @@ function App() {
           <Route path="/tasks-lead" element={<TasksLead />} />
           <Route path="/tasks-member" element={<TasksMember />} />
           <Route path="/projects/:projectId" element={<ProjectDetailsPage />} />
+          <Route path="/issues" element={<IssueBoard />} />
+          <Route path="/code" element={<CodeEditor/>} />
+          <Route path="/notes" element={<ProjectNotes />} />
+          <Route path="/chat" element={<ChatRoom />} />
         </Routes>
       </Router>
     </React.Fragment>
