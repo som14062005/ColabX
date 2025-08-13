@@ -27,6 +27,8 @@ export default function CollabWorkspace() {
   const isUnmountingRef = useRef(false);
   const operationQueueRef = useRef([]);
   const isProcessingRef = useRef(false);
+  const pendingFileSwitch = useRef(null);
+  const lastSyncedContent = useRef(new Map());
 
   // Generate a random color for the user
   function generateRandomColor() {
@@ -36,6 +38,32 @@ export default function CollabWorkspace() {
     ];
     return colors[Math.floor(Math.random() * colors.length)];
   }
+
+  // Queue operations to prevent race conditions
+  const processOperationQueue = useCallback(() => {
+    if (isProcessingRef.current || operationQueueRef.current.length === 0) {
+      return;
+    }
+
+    isProcessingRef.current = true;
+    const operation = operationQueueRef.current.shift();
+    
+    try {
+      operation();
+    } catch (error) {
+      console.error('Error processing queued operation:', error);
+    } finally {
+      isProcessingRef.current = false;
+      // Process next operation after a short delay
+      setTimeout(processOperationQueue, 10);
+    }
+  }, []);
+
+  // Add operation to queue
+  const queueOperation = useCallback((operation) => {
+    operationQueueRef.current.push(operation);
+    processOperationQueue();
+  }, [processOperationQueue]);
 
   // WebSocket connection management with proper cleanup
   const connectWebSocket = useCallback(() => {
@@ -85,7 +113,7 @@ export default function CollabWorkspace() {
         if (isUnmountingRef.current) return;
         try {
           const message = JSON.parse(event.data);
-          handleWebSocketMessage(message);
+          queueOperation(() => handleWebSocketMessage(message));
         } catch (error) {
           console.error('❌ Failed to parse WebSocket message:', error);
         }
@@ -119,7 +147,7 @@ export default function CollabWorkspace() {
       setConnectionError('Unable to establish WebSocket connection');
       console.error('❌ WebSocket connection error:', error);
     }
-  }, [roomId, username]);
+  }, [roomId, username, queueOperation]);
 
   // Handle incoming WebSocket messages
   const handleWebSocketMessage = useCallback((message) => {
@@ -153,14 +181,37 @@ export default function CollabWorkspace() {
         const newFiles = new Map();
         Object.entries(message.files).forEach(([filename, content]) => {
           newFiles.set(filename, content);
+          lastSyncedContent.current.set(filename, content);
         });
         setFiles(newFiles);
         console.log('📄 Synced files from server:', Array.from(newFiles.keys()));
+        
+        // Handle pending file switch
+        if (pendingFileSwitch.current && newFiles.has(pendingFileSwitch.current)) {
+          const pendingFile = pendingFileSwitch.current;
+          pendingFileSwitch.current = null;
+          
+          // Update editor content if needed
+          if (editorRef.current && pendingFile === activeFile) {
+            const content = newFiles.get(pendingFile);
+            const currentContent = editorRef.current.getValue();
+            if (content !== currentContent) {
+              isLocalChangeRef.current = true;
+              editorRef.current.setValue(content);
+              setTimeout(() => { isLocalChangeRef.current = false; }, 100);
+            }
+          }
+        }
         break;
         
       case 'file-created':
         if (message.userId !== username) {
-          setFiles(prev => new Map(prev.set(message.filename, message.content)));
+          setFiles(prev => {
+            const newFiles = new Map(prev);
+            newFiles.set(message.filename, message.content);
+            lastSyncedContent.current.set(message.filename, message.content);
+            return newFiles;
+          });
           console.log(`📄 File created by ${message.userId}: ${message.filename}`);
         }
         break;
@@ -170,8 +221,10 @@ export default function CollabWorkspace() {
           setFiles(prev => {
             const newFiles = new Map(prev);
             newFiles.delete(message.filename);
+            lastSyncedContent.current.delete(message.filename);
             return newFiles;
           });
+          
           if (message.filename === activeFile) {
             setFiles(currentFiles => {
               const remaining = Array.from(currentFiles.keys()).filter(f => f !== message.filename);
@@ -185,10 +238,25 @@ export default function CollabWorkspace() {
         }
         break;
 
-      // Add file content sync when switching files
       case 'file-content':
         if (message.filename && message.content !== undefined) {
-          setFiles(prev => new Map(prev.set(message.filename, message.content)));
+          setFiles(prev => {
+            const newFiles = new Map(prev);
+            newFiles.set(message.filename, message.content);
+            lastSyncedContent.current.set(message.filename, message.content);
+            return newFiles;
+          });
+          
+          // Update editor if this is the active file
+          if (message.filename === activeFile && editorRef.current) {
+            const currentContent = editorRef.current.getValue();
+            if (message.content !== currentContent) {
+              isLocalChangeRef.current = true;
+              editorRef.current.setValue(message.content);
+              setTimeout(() => { isLocalChangeRef.current = false; }, 100);
+            }
+          }
+          
           console.log(`📄 File content synced: ${message.filename}`);
         }
         break;
@@ -203,86 +271,88 @@ export default function CollabWorkspace() {
     }
   }, [username, activeFile]);
 
-  // FIXED: Handle file operations from other users - now works for ALL files
+  // Apply text operation to content
+  const applyOperationToContent = useCallback((content, operation) => {
+    try {
+      const lines = content.split('\n');
+      
+      switch (operation.type) {
+        case 'insert':
+          const lineIndex = Math.max(0, Math.min(operation.position.lineNumber - 1, lines.length - 1));
+          const columnIndex = Math.max(0, Math.min(operation.position.column - 1, lines[lineIndex]?.length || 0));
+          
+          if (lines[lineIndex] !== undefined) {
+            lines[lineIndex] = lines[lineIndex].slice(0, columnIndex) + 
+                              operation.text + 
+                              lines[lineIndex].slice(columnIndex);
+          }
+          break;
+
+        case 'delete':
+          const startLine = Math.max(0, Math.min(operation.range.startLineNumber - 1, lines.length - 1));
+          const endLine = Math.max(0, Math.min(operation.range.endLineNumber - 1, lines.length - 1));
+          const startCol = Math.max(0, Math.min(operation.range.startColumn - 1, lines[startLine]?.length || 0));
+          const endCol = Math.max(0, Math.min(operation.range.endColumn - 1, lines[endLine]?.length || 0));
+
+          if (startLine === endLine && lines[startLine] !== undefined) {
+            lines[startLine] = lines[startLine].slice(0, startCol) + 
+                              lines[startLine].slice(endCol);
+          } else if (lines[startLine] !== undefined && lines[endLine] !== undefined) {
+            lines[startLine] = lines[startLine].slice(0, startCol) + 
+                              lines[endLine].slice(endCol);
+            lines.splice(startLine + 1, endLine - startLine);
+          }
+          break;
+
+        case 'replace':
+          const rStartLine = Math.max(0, Math.min(operation.range.startLineNumber - 1, lines.length - 1));
+          const rEndLine = Math.max(0, Math.min(operation.range.endLineNumber - 1, lines.length - 1));
+          const rStartCol = Math.max(0, Math.min(operation.range.startColumn - 1, lines[rStartLine]?.length || 0));
+          const rEndCol = Math.max(0, Math.min(operation.range.endColumn - 1, lines[rEndLine]?.length || 0));
+
+          if (rStartLine === rEndLine && lines[rStartLine] !== undefined) {
+            lines[rStartLine] = lines[rStartLine].slice(0, rStartCol) + 
+                              operation.text + 
+                              lines[rStartLine].slice(rEndCol);
+          } else if (lines[rStartLine] !== undefined && lines[rEndLine] !== undefined) {
+            const newText = operation.text.split('\n');
+            lines[rStartLine] = lines[rStartLine].slice(0, rStartCol) + newText[0];
+            
+            if (newText.length > 1) {
+              lines.splice(rStartLine + 1, rEndLine - rStartLine, ...newText.slice(1, -1));
+              if (lines[rStartLine + newText.length - 1] !== undefined) {
+                lines[rStartLine + newText.length - 1] = newText[newText.length - 1] + 
+                                                         lines[rEndLine].slice(rEndCol);
+              }
+            } else {
+              lines[rStartLine] += lines[rEndLine].slice(rEndCol);
+              lines.splice(rStartLine + 1, rEndLine - rStartLine);
+            }
+          }
+          break;
+      }
+      
+      return lines.join('\n');
+    } catch (error) {
+      console.error('Error applying operation:', error);
+      return content; // Return original content if operation fails
+    }
+  }, []);
+
+  // Handle file operations from other users
   const handleFileOperation = useCallback((message) => {
     if (message.userId === username) return;
     
     const { operation, filename } = message;
     
-    // Update the file content in our local state regardless of which file is active
+    // Update the file content in our local state
     setFiles(prev => {
       const currentContent = prev.get(filename) || '';
-      let newContent = currentContent;
+      const newContent = applyOperationToContent(currentContent, operation);
       
-      try {
-        switch (operation.type) {
-          case 'insert':
-            const lines = currentContent.split('\n');
-            const lineIndex = operation.position.lineNumber - 1;
-            const columnIndex = operation.position.column - 1;
-            
-            if (lines[lineIndex] !== undefined) {
-              lines[lineIndex] = lines[lineIndex].slice(0, columnIndex) + 
-                                operation.text + 
-                                lines[lineIndex].slice(columnIndex);
-            }
-            newContent = lines.join('\n');
-            break;
-
-          case 'delete':
-            const deleteLines = currentContent.split('\n');
-            const startLine = operation.range.startLineNumber - 1;
-            const endLine = operation.range.endLineNumber - 1;
-            const startCol = operation.range.startColumn - 1;
-            const endCol = operation.range.endColumn - 1;
-
-            if (startLine === endLine && deleteLines[startLine]) {
-              deleteLines[startLine] = deleteLines[startLine].slice(0, startCol) + 
-                                      deleteLines[startLine].slice(endCol);
-            } else if (deleteLines[startLine] && deleteLines[endLine]) {
-              deleteLines[startLine] = deleteLines[startLine].slice(0, startCol) + 
-                                      deleteLines[endLine].slice(endCol);
-              deleteLines.splice(startLine + 1, endLine - startLine);
-            }
-            newContent = deleteLines.join('\n');
-            break;
-
-          case 'replace':
-            const replaceLines = currentContent.split('\n');
-            const rStartLine = operation.range.startLineNumber - 1;
-            const rEndLine = operation.range.endLineNumber - 1;
-            const rStartCol = operation.range.startColumn - 1;
-            const rEndCol = operation.range.endColumn - 1;
-
-            if (rStartLine === rEndLine && replaceLines[rStartLine]) {
-              replaceLines[rStartLine] = replaceLines[rStartLine].slice(0, rStartCol) + 
-                                        operation.text + 
-                                        replaceLines[rStartLine].slice(rEndCol);
-            } else if (replaceLines[rStartLine] && replaceLines[rEndLine]) {
-              const newText = operation.text.split('\n');
-              replaceLines[rStartLine] = replaceLines[rStartLine].slice(0, rStartCol) + newText[0];
-              
-              if (newText.length > 1) {
-                replaceLines.splice(rStartLine + 1, rEndLine - rStartLine, ...newText.slice(1, -1));
-                if (replaceLines[rStartLine + newText.length - 1]) {
-                  replaceLines[rStartLine + newText.length - 1] = newText[newText.length - 1] + 
-                                                                 replaceLines[rEndLine].slice(rEndCol);
-                }
-              } else {
-                replaceLines[rStartLine] += replaceLines[rEndLine].slice(rEndCol);
-                replaceLines.splice(rStartLine + 1, rEndLine - rStartLine);
-              }
-            }
-            newContent = replaceLines.join('\n');
-            break;
-        }
-      } catch (error) {
-        console.error('Failed to apply operation to file content:', error);
-        return prev; // Return unchanged if operation fails
-      }
-
       const newFiles = new Map(prev);
       newFiles.set(filename, newContent);
+      lastSyncedContent.current.set(filename, newContent);
       return newFiles;
     });
 
@@ -291,10 +361,11 @@ export default function CollabWorkspace() {
       isLocalChangeRef.current = true;
 
       try {
+        const monaco = window.monaco;
         switch (operation.type) {
           case 'insert':
             editorRef.current.executeEdits('collaboration', [{
-              range: new window.monaco.Range(
+              range: new monaco.Range(
                 operation.position.lineNumber,
                 operation.position.column,
                 operation.position.lineNumber,
@@ -306,7 +377,7 @@ export default function CollabWorkspace() {
             
           case 'delete':
             editorRef.current.executeEdits('collaboration', [{
-              range: new window.monaco.Range(
+              range: new monaco.Range(
                 operation.range.startLineNumber,
                 operation.range.startColumn,
                 operation.range.endLineNumber,
@@ -318,7 +389,7 @@ export default function CollabWorkspace() {
             
           case 'replace':
             editorRef.current.executeEdits('collaboration', [{
-              range: new window.monaco.Range(
+              range: new monaco.Range(
                 operation.range.startLineNumber,
                 operation.range.startColumn,
                 operation.range.endLineNumber,
@@ -336,7 +407,7 @@ export default function CollabWorkspace() {
         isLocalChangeRef.current = false;
       }, 100);
     }
-  }, [username, activeFile]);
+  }, [username, activeFile, applyOperationToContent]);
 
   // Handle cursor position updates
   const handleCursorUpdate = useCallback((message) => {
@@ -360,7 +431,9 @@ export default function CollabWorkspace() {
   const sendMessage = useCallback((message) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(message));
+      return true;
     }
+    return false;
   }, []);
 
   // Send file operation to other users
@@ -385,14 +458,18 @@ export default function CollabWorkspace() {
     });
   }, [sendMessage, username, roomId]);
 
-  // FIXED: Request file content when switching files
+  // Request file content when switching files
   const requestFileContent = useCallback((filename) => {
-    sendMessage({
+    const success = sendMessage({
       type: 'request-file-content',
       filename,
       userId: username,
       roomId
     });
+    
+    if (success) {
+      pendingFileSwitch.current = filename;
+    }
   }, [sendMessage, username, roomId]);
 
   // Initialize WebSocket connection
@@ -446,7 +523,7 @@ export default function CollabWorkspace() {
     }
   }, [roomId, username]);
 
-  // FIXED: Notify when user switches files and request latest content
+  // Handle file switching with proper sync
   useEffect(() => {
     if (connected && activeFile) {
       // Request the latest file content from server
@@ -465,37 +542,44 @@ export default function CollabWorkspace() {
     }
   }, [activeFile, connected, sendCursorPosition, requestFileContent]);
 
-  // Handle editor changes
+  // Handle editor changes with debouncing
   const handleEditorChange = useCallback((value, event) => {
     if (isLocalChangeRef.current) return;
 
+    // Update local state immediately
     setFiles(prev => new Map(prev.set(activeFile, value || '')));
 
-    if (event?.changes) {
+    // Send operations to other users
+    if (event?.changes && connected) {
       event.changes.forEach(change => {
         const operation = {
-          type: change.text ? 'replace' : 'delete',
-          range: {
+          type: change.text ? (change.rangeLength > 0 ? 'replace' : 'insert') : 'delete',
+          range: change.rangeLength > 0 ? {
             startLineNumber: change.range.startLineNumber,
             startColumn: change.range.startColumn,
             endLineNumber: change.range.endLineNumber,
             endColumn: change.range.endColumn
-          },
+          } : undefined,
+          position: change.rangeLength === 0 ? {
+            lineNumber: change.range.startLineNumber,
+            column: change.range.startColumn
+          } : undefined,
           text: change.text
         };
+        
         sendFileOperation(operation, activeFile);
       });
     }
-  }, [activeFile, sendFileOperation]);
+  }, [activeFile, sendFileOperation, connected]);
 
   // Handle cursor position changes
   const handleCursorPositionChange = useCallback((event) => {
-    if (!event?.position) return;
+    if (!event?.position || !connected) return;
     sendCursorPosition({
       lineNumber: event.position.lineNumber,
       column: event.position.column
     }, activeFile);
-  }, [sendCursorPosition, activeFile]);
+  }, [sendCursorPosition, activeFile, connected]);
 
   // Create new file
   const createNewFile = useCallback(() => {
@@ -742,7 +826,7 @@ export default function CollabWorkspace() {
               </div>
               
               {connectionError && (
-                <div className="flex items-center gap-2 text-amber-600 bg-amber-50 p-2 rounded-lg">
+                <div className="flex items-center gap-2 text-amber-600 bg-amber-50 p-2 rounded-lg mb-3">
                   <AlertCircle size={14} />
                   <span className="text-xs">{connectionError}</span>
                 </div>
@@ -761,189 +845,117 @@ export default function CollabWorkspace() {
                   value={roomId}
                   onChange={(e) => setRoomId(e.target.value)}
                   className="text-sm border border-gray-300 rounded px-2 py-1 flex-1"
-                  placeholder="Room ID"
+                                    placeholder="Room ID"
                 />
               </div>
             </div>
 
-            {/* Active Users */}
-            {showPresence && (
-              <div className="p-4 border-b border-gray-200">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-medium text-gray-700">Active Users ({activeUsers.size})</h3>
-                  <button
-                    onClick={() => setShowPresence(false)}
-                    className="p-1 hover:bg-gray-100 rounded"
-                  >
-                    <Eye size={14} />
-                  </button>
-                </div>
-                
-                <div className="space-y-2">
-                  {/* Current user */}
-                  <div className="flex items-center gap-2 px-2 py-1 text-xs bg-blue-50 rounded">
-                    <div 
-                      className="w-2 h-2 rounded-full" 
-                      style={{ backgroundColor: userColorRef.current }}
-                    ></div>
-                    <span className="font-medium">{username} (you)</span>
-                    <span className="text-gray-500">in {activeFile}</span>
-                  </div>
-                  
-                  {/* Other users */}
-                  {Array.from(activeUsers.values())
-                    .filter(user => user.id !== username)
-                    .map(user => (
-                      <div key={user.id} className="flex items-center gap-2 px-2 py-1 text-xs bg-gray-100 rounded">
-                        <div 
-                          className="w-2 h-2 rounded-full" 
-                          style={{ backgroundColor: user.color }}
-                        ></div>
-                        <span className="font-medium">{user.name}</span>
-                        {user.filename && (
-                          <span className="text-gray-500">
-                            in {user.filename}
-                            {user.cursor && ` (L${user.cursor.lineNumber})`}
-                          </span>
-                        )}
-                      </div>
-                    ))
-                  }
-                </div>
-                
-                {activeUsers.size === 1 && (
-                  <p className="text-xs text-gray-500 mt-2">
-                    Share the room ID to collaborate with others
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* File Explorer */}
-            <div className="p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-medium text-gray-700">Files</h3>
-                <div className="flex gap-1">
+            {/* Files List */}
+            <div className="p-4 border-b border-gray-200">
+              <div className="flex justify-between items-center mb-2">
+                <h2 className="text-sm font-semibold text-gray-700">Files</h2>
+                <div className="flex gap-2">
                   <button
                     onClick={createNewFile}
-                    className="p-1 hover:bg-gray-100 rounded transition-colors"
+                    className="p-1 hover:bg-gray-100 rounded"
                     title="New File"
                   >
-                    <Plus size={14} />
+                    <Plus size={16} />
                   </button>
-                  <label className="p-1 hover:bg-gray-100 rounded transition-colors cursor-pointer" title="Upload File">
-                    <Upload size={14} />
+                  <label className="p-1 hover:bg-gray-100 rounded cursor-pointer" title="Upload File">
+                    <Upload size={16} />
                     <input
                       type="file"
-                      onChange={handleFileUpload}
                       className="hidden"
-                      accept=".js,.jsx,.ts,.tsx,.json,.md,.css,.html,.py,.txt"
+                      onChange={handleFileUpload}
                     />
                   </label>
                 </div>
               </div>
 
-              <div className="space-y-1">
+              <ul className="space-y-1">
                 {Array.from(files.keys()).map((filename) => (
-                  <div
+                  <li
                     key={filename}
-                    className={`group flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors ${
-                      filename === activeFile 
-                        ? 'bg-blue-100 text-blue-900' 
-                        : 'hover:bg-gray-100 text-gray-700'
+                    className={`flex items-center justify-between p-2 rounded cursor-pointer ${
+                      filename === activeFile
+                        ? "bg-blue-50 text-blue-700"
+                        : "hover:bg-gray-100"
                     }`}
+                    onClick={() => setActiveFile(filename)}
                   >
-                    <div
-                      className="w-2 h-2 rounded-sm"
-                      style={{ backgroundColor: getFileIcon(filename) }}
-                    />
-                    <span
-                      className="text-sm flex-1 truncate"
-                      onClick={() => setActiveFile(filename)}
-                    >
-                      {filename}
-                    </span>
-                    <div className="hidden group-hover:flex items-center gap-1">
-                      <button
-                        onClick={() => downloadFile(filename)}
-                        className="p-1 hover:bg-gray-200 rounded"
-                        title="Download"
-                      >
-                        <Download size={12} />
-                      </button>
-                      {files.size > 1 && (
-                        <button
-                          onClick={() => deleteFile(filename)}
-                          className="p-1 hover:bg-red-100 text-red-600 rounded"
-                          title="Delete"
-                        >
-                          <Trash2 size={12} />
-                        </button>
-                      )}
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: getFileIcon(filename) }}
+                      />
+                      <span className="text-sm font-medium">{filename}</span>
                     </div>
-                  </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          downloadFile(filename);
+                        }}
+                        title="Download"
+                        className="p-1 hover:bg-gray-200 rounded"
+                      >
+                        <Download size={14} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteFile(filename);
+                        }}
+                        title="Delete"
+                        className="p-1 hover:bg-gray-200 rounded text-red-600"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </li>
                 ))}
-              </div>
+              </ul>
             </div>
+
+            {/* Active Users */}
+            {showPresence && (
+              <div className="p-4">
+                <h2 className="text-sm font-semibold text-gray-700 mb-2">
+                  Active Users
+                </h2>
+                <ul className="space-y-1">
+                  {Array.from(activeUsers.values()).map((user) => (
+                    <li key={user.id} className="flex items-center gap-2">
+                      <span
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: user.color }}
+                      />
+                      <span className="text-sm">{user.name}</span>
+                      {user.filename && (
+                        <span className="text-xs text-gray-500">
+                          ({user.filename} - line {user.cursor?.lineNumber || "?"})
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </>
         )}
       </div>
 
       {/* Main Editor Area */}
       <div className="flex-1 flex flex-col">
-        {/* Editor Header */}
-        <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div
-              className="w-3 h-3 rounded-sm"
-              style={{ backgroundColor: getFileIcon(activeFile) }}
-            />
-            <span className="font-medium text-gray-900">{activeFile}</span>
-            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
-              {detectLanguage(activeFile)}
-            </span>
-          </div>
-          
-          <div className="flex items-center gap-2">
-            {connected && (
-              <div className="flex items-center gap-2 text-green-600">
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                <span className="text-xs">Live</span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Monaco Editor */}
         <div className="flex-1">
           <Editor
             height="100%"
             language={detectLanguage(activeFile)}
-            value={files.get(activeFile) || ""}
+            value={files.get(activeFile)}
             onChange={handleEditorChange}
             onMount={handleEditorMount}
-            theme="vs-light"
-            options={{
-              wordWrap: "on",
-              minimap: { enabled: false },
-              fontSize: 14,
-              lineHeight: 1.6,
-              fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
-              scrollBeyondLastLine: false,
-              smoothScrolling: true,
-              cursorBlinking: "smooth",
-              renderLineHighlight: "gutter",
-              selectOnLineNumbers: true,
-              automaticLayout: true,
-              tabSize: 2,
-              insertSpaces: true,
-              detectIndentation: false,
-              folding: true,
-              foldingHighlight: true,
-              showFoldingControls: "mouseover",
-              matchBrackets: "always",
-              bracketPairColorization: { enabled: true }
-            }}
+            theme="vs-dark"
           />
         </div>
       </div>
