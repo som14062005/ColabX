@@ -35,17 +35,17 @@ const UserProfile = ({ userData, onBack, isOwnProfile = true }) => {
 
     // Default profile data - will be overridden by userData prop
     const defaultProfile = {
-        name: 'Alex Johnson',
-        title: 'Full Stack Developer',
-        location: 'San Francisco, CA',
-        email: 'alex.johnson@email.com',
-        phone: '+1 (555) 123-4567',
+        name: 'Pranaav kumar',
+        title: 'Blockchain Developer',
+        location: 'Virugambakkam, chennai',
+        email: 'pranaavkumarj@email.com',
+        phone: '1234567890',
         bio: 'Passionate developer with 5+ years of experience in building scalable web applications. Love working with modern technologies and contributing to open-source projects.',
-        avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face',
+        avatar: '',
         skills: ['React', 'Node.js', 'Python', 'TypeScript', 'AWS', 'Docker'],
         walletAddress: '',
         links: {
-            github: 'https://github.com/alexjohnson',
+            github: 'https://github.com/pranaav-kumar',
             linkedin: 'https://linkedin.com/in/alexjohnson',
             website: 'https://alexjohnson.dev'
         },
