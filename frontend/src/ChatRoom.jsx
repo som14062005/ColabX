@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Hash, Users, Send, Trash2, ChevronDown, Code, FileText, CheckSquare, GitBranch, PenTool, MessageCircle } from 'lucide-react';
+import { Plus, Hash, Users, Send, Trash2, ChevronDown, Code, FileText, CheckSquare, GitBranch, PenTool, MessageCircle, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const ChatRoom = () => {
@@ -133,6 +133,113 @@ const ChatRoom = () => {
     <div className="flex h-screen text-white relative overflow-hidden" style={{ 
       background: 'linear-gradient(135deg, #0c0c0c 0%, #1a1a1a 50%, #0f0f0f 100%)'
     }}>
+      {/* Top Navbar */}
+      <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-4 border-b border-gray-700" style={{
+        background: 'linear-gradient(90deg, rgba(26,26,26,0.95) 0%, rgba(20,20,20,0.95) 100%)',
+        backdropFilter: 'blur(20px)',
+        boxShadow: '0 4px 20px rgba(0,0,0,0.2)'
+      }}>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold">
+            <span style={{ color: '#A259FF' }}>Colab</span>
+            <span style={{ color: '#FFFFFF' }}>X</span>
+          </h1>
+          
+          {/* Workspace Dropdown Button in Navbar */}
+          <div className="relative" ref={dropdownRef}>
+            <button
+              onClick={() => setShowWorkspaceDropdown(!showWorkspaceDropdown)}
+              className="p-2 rounded-lg transition-all duration-300 hover:scale-110 active:scale-95"
+              style={{
+                background: 'linear-gradient(135deg, rgba(168,85,247,0.2) 0%, rgba(59,130,246,0.2) 100%)',
+                border: '1px solid rgba(168,85,247,0.3)',
+                boxShadow: showWorkspaceDropdown 
+                  ? '0 8px 32px rgba(168,85,247,0.4)' 
+                  : '0 4px 20px rgba(168,85,247,0.2)',
+              }}
+            >
+              <ChevronDown 
+                size={18} 
+                className={`transition-all duration-300 ${showWorkspaceDropdown ? 'rotate-180 text-purple-300' : 'text-white'}`}
+              />
+            </button>
+
+            {/* Dropdown Menu */}
+            {showWorkspaceDropdown && (
+              <div 
+                className="absolute top-full left-0 mt-2 w-56 rounded-2xl overflow-hidden z-50"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(13,13,13,0.95) 0%, rgba(26,26,26,0.95) 100%)',
+                  border: '1px solid rgba(168,85,247,0.2)',
+                  boxShadow: '0 20px 40px rgba(0,0,0,0.6), 0 8px 32px rgba(168,85,247,0.1)',
+                  backdropFilter: 'blur(20px)',
+                }}
+              >
+                <div className="p-2">
+                  <div className="text-xs font-semibold uppercase tracking-wider text-gray-400 px-3 py-2 mb-1">
+                    Workspace Features
+                  </div>
+                  {workspaceFeatures.map((feature) => {
+                    const Icon = feature.icon;
+                    return (
+                      <button
+                        key={feature.id}
+                        onClick={() => handleWorkspaceFeatureClick(feature)}
+                        className={`w-full flex items-center px-3 py-3 rounded-xl transition-all duration-200 group relative ${
+                          feature.isActive 
+                            ? 'cursor-default' 
+                            : 'hover:scale-[1.02] active:scale-[0.98] cursor-pointer'
+                        }`}
+                        style={{
+                          background: feature.isActive 
+                            ? 'linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)'
+                            : 'transparent',
+                          color: feature.isActive ? '#FFFFFF' : '#B3B3B3',
+                          boxShadow: feature.isActive ? '0 4px 20px rgba(124,58,237,0.4)' : 'none'
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!feature.isActive) {
+                            e.target.style.background = 'linear-gradient(135deg, rgba(168,85,247,0.1) 0%, rgba(59,130,246,0.1) 100%)';
+                            e.target.style.color = '#FFFFFF';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!feature.isActive) {
+                            e.target.style.background = 'transparent';
+                            e.target.style.color = '#B3B3B3';
+                          }
+                        }}
+                      >
+                        <Icon size={18} className="mr-3 relative z-10" />
+                        <span className="text-sm font-medium relative z-10">{feature.name}</span>
+                        {feature.isActive && (
+                          <div className="ml-auto w-2 h-2 rounded-full bg-green-400 shadow-lg shadow-green-400/50 animate-pulse"></div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-4">
+          <div style={{ fontSize: '14px', color: '#B3B3B3' }}>
+            Collaborative Workspace Platform
+          </div>
+          
+          {/* Profile Navigation Button */}
+          <button
+            onClick={() => navigate("/profile")}
+            className="w-10 h-10 rounded-full bg-[#A259FF] hover:bg-[#8B46FF] flex items-center justify-center text-white transition-all duration-200 hover:scale-110 hover:shadow-lg hover:shadow-[#A259FF]/25"
+            aria-label="Go to Profile"
+          >
+            <User size={20} />
+          </button>
+        </div>
+      </nav>
+
       {/* Animated background elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-1/2 -right-1/2 w-96 h-96 rounded-full opacity-5 animate-pulse" style={{
@@ -145,105 +252,19 @@ const ChatRoom = () => {
       </div>
 
       {/* Sidebar */}
-      <div className="w-60 flex flex-col relative z-10 backdrop-blur-sm" style={{ 
+      <div className="w-60 flex flex-col relative z-10 backdrop-blur-sm mt-16" style={{ 
         background: 'linear-gradient(180deg, rgba(26,26,26,0.95) 0%, rgba(20,20,20,0.95) 100%)',
         borderRight: '1px solid rgba(255,255,255,0.1)',
         boxShadow: '4px 0 20px rgba(0,0,0,0.3)'
       }}>
-        {/* Server Header with Workspace Dropdown */}
+        {/* Server Header - Simplified since dropdown moved to navbar */}
         <div className="p-4 border-b border-gray-700 relative">
           <div className="absolute inset-0 bg-gradient-to-r from-purple-500/10 to-blue-500/10 rounded-t-lg"></div>
           <div className="relative">
-            <div className="flex items-center justify-between">
-              <div className="flex-1">
-                <h1 className="text-lg font-bold text-white mb-1" style={{
-                  textShadow: '0 2px 10px rgba(168,85,247,0.3)'
-                }}>Project Chat</h1>
-                <p className="text-sm" style={{ color: '#B3B3B3' }}>Team Workspace</p>
-              </div>
-              
-              {/* Workspace Dropdown Button */}
-              <div className="relative" ref={dropdownRef}>
-                <button
-                  onClick={() => setShowWorkspaceDropdown(!showWorkspaceDropdown)}
-                  className="p-2.5 rounded-xl transition-all duration-300 hover:scale-110 active:scale-95 relative group"
-                  style={{
-                    background: 'linear-gradient(135deg, rgba(168,85,247,0.2) 0%, rgba(59,130,246,0.2) 100%)',
-                    border: '1px solid rgba(168,85,247,0.3)',
-                    boxShadow: showWorkspaceDropdown 
-                      ? '0 8px 32px rgba(168,85,247,0.4), inset 0 1px 0 rgba(255,255,255,0.1)' 
-                      : '0 4px 20px rgba(168,85,247,0.2)',
-                  }}
-                >
-                  <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                  <ChevronDown 
-                    size={18} 
-                    className={`transition-all duration-300 relative z-10 ${showWorkspaceDropdown ? 'rotate-180 text-purple-300' : 'text-white'}`}
-                  />
-                </button>
-
-                {/* Dropdown Menu */}
-                {showWorkspaceDropdown && (
-                  <div 
-                    className="absolute top-full right-0 mt-2 w-56 rounded-2xl overflow-hidden z-50 animate-in slide-in-from-top-2 duration-200"
-                    style={{
-                      background: 'linear-gradient(135deg, rgba(13,13,13,0.95) 0%, rgba(26,26,26,0.95) 100%)',
-                      border: '1px solid rgba(168,85,247,0.2)',
-                      boxShadow: '0 20px 40px rgba(0,0,0,0.6), 0 8px 32px rgba(168,85,247,0.1)',
-                      backdropFilter: 'blur(20px)',
-                    }}
-                  >
-                    <div className="p-2">
-                      <div className="text-xs font-semibold uppercase tracking-wider text-gray-400 px-3 py-2 mb-1">
-                        Workspace Features
-                      </div>
-                      {workspaceFeatures.map((feature, index) => {
-                        const Icon = feature.icon;
-                        return (
-                          <button
-                            key={feature.id}
-                            onClick={() => handleWorkspaceFeatureClick(feature)}
-                            className={`w-full flex items-center px-3 py-3 rounded-xl transition-all duration-200 group relative ${
-                              feature.isActive 
-                                ? 'cursor-default' 
-                                : 'hover:scale-[1.02] active:scale-[0.98] cursor-pointer'
-                            }`}
-                            style={{
-                              background: feature.isActive 
-                                ? 'linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)'
-                                : 'transparent',
-                              color: feature.isActive ? '#FFFFFF' : '#B3B3B3',
-                              boxShadow: feature.isActive ? '0 4px 20px rgba(124,58,237,0.4)' : 'none'
-                            }}
-                            onMouseEnter={(e) => {
-                              if (!feature.isActive) {
-                                e.target.style.background = 'linear-gradient(135deg, rgba(168,85,247,0.1) 0%, rgba(59,130,246,0.1) 100%)';
-                                e.target.style.color = '#FFFFFF';
-                              }
-                            }}
-                            onMouseLeave={(e) => {
-                              if (!feature.isActive) {
-                                e.target.style.background = 'transparent';
-                                e.target.style.color = '#B3B3B3';
-                              }
-                            }}
-                          >
-                            {!feature.isActive && (
-                              <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                            )}
-                            <Icon size={18} className="mr-3 relative z-10" />
-                            <span className="text-sm font-medium relative z-10">{feature.name}</span>
-                            {feature.isActive && (
-                              <div className="ml-auto w-2 h-2 rounded-full bg-green-400 shadow-lg shadow-green-400/50 animate-pulse"></div>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
+            <h1 className="text-lg font-bold text-white mb-1" style={{
+              textShadow: '0 2px 10px rgba(168,85,247,0.3)'
+            }}>Project Chat</h1>
+            <p className="text-sm" style={{ color: '#B3B3B3' }}>Team Workspace</p>
           </div>
         </div>
 
@@ -378,7 +399,7 @@ const ChatRoom = () => {
       </div>
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col relative z-10">
+      <div className="flex-1 flex flex-col relative z-10 mt-16">
         {/* Chat Header */}
         <div className="p-4 border-b border-gray-700 flex items-center relative backdrop-blur-sm" style={{ 
           background: 'linear-gradient(90deg, rgba(26,26,26,0.95) 0%, rgba(20,20,20,0.95) 100%)',

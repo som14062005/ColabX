@@ -1,22 +1,74 @@
 import React, { useState } from 'react';
-import { FaPlus, FaSearch, FaArrowLeft, FaComments, FaPaperPlane, FaChevronDown, FaChevronUp, FaHeart, FaShare, FaImage, FaTimes } from 'react-icons/fa';
+import { FaPlus, FaSearch, FaArrowLeft, FaComments, FaPaperPlane, FaChevronDown, FaChevronUp, FaHeart, FaShare, FaImage, FaTimes, FaFlag, FaExclamationTriangle, FaUserTimes, FaBell, FaCrown, FaUserShield } from 'react-icons/fa';
 import { CgProfile } from "react-icons/cg";
+import { useNavigate } from 'react-router-dom';
 
 const CommunitiesPage = () => {
+  const navigate = useNavigate();
+  
+  // Enhanced dummy data with Tamil names
   const [communities, setCommunities] = useState([
     {
       name: 'Blockchain Builders',
       description: 'Discuss, build, and launch Web3 projects.',
-      rules: 'Be respectful. No spam. Keep it on-topic.',
+      rules: 'Be respectful. No spam. Keep it on-topic. Share knowledge freely.',
+      lead: 'arjun', // Original creator
+      admins: ['arjun', 'deepak'], // Array of admins (includes original lead)
+      members: ['arjun', 'ravi', 'deepak', 'pranaav', 'karthik', 'meera', 'rajesh', 'kavya'],
+      reports: [
+        {
+          reportedUser: 'ravi',
+          reportedBy: 'kavya',
+          reason: 'Posting irrelevant content and spamming the chat',
+          timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+          status: 'pending'
+        },
+        {
+          reportedUser: 'rajesh',
+          reportedBy: 'meera',
+          reason: 'Using inappropriate language and being disrespectful',
+          timestamp: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
+          status: 'pending'
+        },
+        {
+          reportedUser: 'ravi',
+          reportedBy: 'karthik',
+          reason: 'Sharing misleading information about DeFi protocols',
+          timestamp: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
+          status: 'pending'
+        }
+      ],
       posts: [
         {
-          user: 'alice',
+          user: 'arjun',
           title: 'Building a DeFi Protocol',
-          content: 'Just launched my first DeFi protocol on Ethereum testnet. Looking for feedback and potential collaborators!',
+          content: 'Just launched my first DeFi protocol on Ethereum testnet. Looking for feedback and potential collaborators! The protocol focuses on yield farming with automated strategies.',
           images: [],
           comments: [
-            { user: 'bob', text: 'This looks amazing! What consensus mechanism are you using?' },
-            { user: 'charlie', text: 'Great work! I\'d love to contribute to the frontend.' }
+            { user: 'ravi', text: 'This looks amazing! What consensus mechanism are you using?' },
+            { user: 'deepak', text: 'Great work! I\'d love to contribute to the frontend.' },
+            { user: 'karthik', text: 'Have you considered gas optimization? I can help with that.' }
+          ]
+        },
+        {
+          user: 'deepak',
+          title: 'Smart Contract Security Best Practices',
+          content: 'After auditing 50+ smart contracts, here are the top security vulnerabilities I see developers make. Thread below 🧵',
+          images: [],
+          comments: [
+            { user: 'arjun', text: 'This is incredibly valuable! Thank you for sharing.' },
+            { user: 'meera', text: 'The reentrancy examples are perfect.' },
+            { user: 'rajesh', text: 'Bookmarking this for reference!' }
+          ]
+        },
+        {
+          user: 'kavya',
+          title: 'NFT Marketplace Integration',
+          content: 'Working on integrating OpenSea API with our dApp. Has anyone worked with their new API v2? Looking for insights on batch operations.',
+          images: [],
+          comments: [
+            { user: 'karthik', text: 'I implemented this last month. Happy to help!' },
+            { user: 'ravi', text: 'The documentation is pretty good for v2.' }
           ]
         }
       ]
@@ -24,21 +76,142 @@ const CommunitiesPage = () => {
     {
       name: 'React Developers',
       description: 'React tips, tricks and projects.',
-      rules: 'No job posts. Be kind. Help others.',
+      rules: 'No job posts. Be kind. Help others. Share code responsibly.',
+      lead: 'karthik',
+      admins: ['karthik', 'meera'],
+      members: ['karthik', 'meera', 'pranaav', 'rajesh', 'kavya', 'vikram', 'priya'],
+      reports: [
+        {
+          reportedUser: 'vikram',
+          reportedBy: 'priya',
+          reason: 'Consistently posting off-topic content',
+          timestamp: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+          status: 'pending'
+        }
+      ],
       posts: [
         {
-          user: 'david',
+          user: 'karthik',
           title: 'React 19 Features You Should Know',
-          content: 'The new React 19 beta introduces some game-changing features. Here are my top 5 favorites...',
+          content: 'The new React 19 beta introduces some game-changing features. Here are my top 5 favorites: Concurrent rendering, Server Components, automatic batching, and more!',
           images: [],
           comments: [
-            { user: 'eve', text: 'The new compiler optimizations are incredible!' }
+            { user: 'meera', text: 'The new compiler optimizations are incredible!' },
+            { user: 'kavya', text: 'Server Components are a game changer for performance.' },
+            { user: 'vikram', text: 'When is the stable release expected?' }
+          ]
+        },
+        {
+          user: 'meera',
+          title: 'State Management in 2024',
+          content: 'Redux vs Zustand vs Context API - which one should you choose? Here\'s my detailed comparison based on real project experience.',
+          images: [],
+          comments: [
+            { user: 'karthik', text: 'Great analysis! I agree with your Zustand recommendation.' },
+            { user: 'priya', text: 'The performance comparison chart is very helpful.' }
+          ]
+        }
+      ]
+    },
+    {
+      name: 'UI/UX Designers',
+      description: 'Share designs, get feedback, and discuss UI/UX trends.',
+      rules: 'Constructive feedback only. Credit original work. No self-promotion spam.',
+      lead: 'kavya',
+      admins: ['kavya'],
+      members: ['kavya', 'vikram', 'priya', 'suresh', 'divya', 'pranaav'],
+      reports: [],
+      posts: [
+        {
+          user: 'kavya',
+          title: 'Design System Components',
+          content: 'Just finished creating a comprehensive design system for our B2B platform. 200+ components, dark/light themes, and full accessibility compliance.',
+          images: [],
+          comments: [
+            { user: 'vikram', text: 'The color palette is beautiful! Any chance you could share the Figma file?' },
+            { user: 'priya', text: 'How did you approach the accessibility testing?' }
+          ]
+        }
+      ]
+    },
+    {
+      name: 'Python Developers',
+      description: 'Python programming, libraries, and frameworks discussion.',
+      rules: 'Help beginners. Share quality resources. No homework requests.',
+      lead: 'vikram',
+      admins: ['vikram', 'priya'],
+      members: ['vikram', 'priya', 'suresh', 'divya', 'arun', 'lakshmi'],
+      reports: [
+        {
+          reportedUser: 'arun',
+          reportedBy: 'lakshmi',
+          reason: 'Posting homework questions without attempting solutions',
+          timestamp: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
+          status: 'pending'
+        }
+      ],
+      posts: [
+        {
+          user: 'vikram',
+          title: 'FastAPI vs Django Performance',
+          content: 'Did extensive benchmarking between FastAPI and Django for our microservices. Results might surprise you! FastAPI wins in most scenarios.',
+          images: [],
+          comments: [
+            { user: 'priya', text: 'What about Django with async views?' },
+            { user: 'suresh', text: 'Great benchmarking methodology!' }
+          ]
+        }
+      ]
+    },
+    {
+      name: 'Mobile Development',
+      description: 'React Native, Flutter, and native mobile app development.',
+      rules: 'Share code samples. Help with debugging. Respect all platforms.',
+      lead: 'priya',
+      admins: ['priya'],
+      members: ['priya', 'suresh', 'divya', 'arun', 'lakshmi', 'murugan'],
+      reports: [],
+      posts: []
+    },
+    {
+      name: 'DevOps Engineers',
+      description: 'Infrastructure, CI/CD, containers, and cloud technologies.',
+      rules: 'Share infrastructure tips. Security first. Document solutions.',
+      lead: 'suresh',
+      admins: ['suresh', 'divya'],
+      members: ['suresh', 'divya', 'arun', 'lakshmi', 'murugan', 'saranya', 'ganesh'],
+      reports: [
+        {
+          reportedUser: 'ganesh',
+          reportedBy: 'saranya',
+          reason: 'Sharing potentially insecure configuration examples',
+          timestamp: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
+          status: 'pending'
+        },
+        {
+          reportedUser: 'murugan',
+          reportedBy: 'lakshmi',
+          reason: 'Being dismissive of alternative solutions',
+          timestamp: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
+          status: 'pending'
+        }
+      ],
+      posts: [
+        {
+          user: 'suresh',
+          title: 'Kubernetes Best Practices',
+          content: 'After managing K8s clusters for 3 years, here are the practices that saved us from disasters. Resource limits, health checks, and monitoring are crucial!',
+          images: [],
+          comments: [
+            { user: 'divya', text: 'The resource limits section is gold!' },
+            { user: 'arun', text: 'How do you handle secrets management?' }
           ]
         }
       ]
     }
   ]);
-  const [joinedCommunities, setJoinedCommunities] = useState([communities[0].name]);
+  
+  const [joinedCommunities, setJoinedCommunities] = useState(['Blockchain Builders', 'React Developers', 'UI/UX Designers']);
   const [currentCommunity, setCurrentCommunity] = useState(communities[0]);
   const [view, setView] = useState('community');
   const [searchQuery, setSearchQuery] = useState('');
@@ -51,6 +224,26 @@ const CommunitiesPage = () => {
   const [showPostModal, setShowPostModal] = useState(false);
   const [expandedComments, setExpandedComments] = useState({});
   const [username] = useState('pranaav');
+  
+  // Report system states
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportingUser, setReportingUser] = useState(null);
+  const [reportReason, setReportReason] = useState('');
+  const [showReportsPanel, setShowReportsPanel] = useState(false);
+  const [showKickConfirmModal, setShowKickConfirmModal] = useState(false);
+  const [userToKick, setUserToKick] = useState(null);
+  
+  // Admin management states
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [showPromoteModal, setShowPromoteModal] = useState(false);
+  const [showDemoteModal, setShowDemoteModal] = useState(false);
+  const [userToPromote, setUserToPromote] = useState(null);
+  const [userToDemote, setUserToDemote] = useState(null);
+
+  // Profile navigation handler
+  const handleProfileClick = () => {
+    navigate('/profile');
+  };
 
   const toggleComments = (postIndex) => {
     setExpandedComments(prev => ({
@@ -130,18 +323,246 @@ const CommunitiesPage = () => {
   const confirmJoin = (accepted) => {
     if (accepted && pendingJoinCommunity) {
       setJoinedCommunities([...joinedCommunities, pendingJoinCommunity.name]);
+      const updatedCommunities = communities.map(c => {
+        if (c.name === pendingJoinCommunity.name) {
+          return {
+            ...c,
+            members: [...c.members, username]
+          };
+        }
+        return c;
+      });
+      setCommunities(updatedCommunities);
     }
     setPendingJoinCommunity(null);
   };
 
   const handleCreateCommunity = () => {
     if (!newCommunity.name || !newCommunity.description || !newCommunity.rules) return;
-    const newComm = { ...newCommunity, posts: [] };
+    
+    // Add dummy data for newly created community to show functionality
+    const newComm = { 
+      ...newCommunity, 
+      posts: [], 
+      lead: username, // Creator becomes the lead
+      admins: [username], // Creator is the first admin
+      members: [username, 'arjun', 'ravi', 'deepak', 'karthik', 'meera'], // Add some dummy members
+      reports: [
+        // Add dummy reports to show functionality
+        {
+          reportedUser: 'arjun',
+          reportedBy: 'ravi',
+          reason: 'Posting spam content repeatedly',
+          timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString(), // 30 minutes ago
+          status: 'pending'
+        },
+        {
+          reportedUser: 'deepak',
+          reportedBy: 'karthik',
+          reason: 'Using inappropriate language in discussions',
+          timestamp: new Date(Date.now() - 60 * 60 * 1000).toISOString(), // 1 hour ago
+          status: 'pending'
+        },
+        {
+          reportedUser: 'arjun',
+          reportedBy: 'meera',
+          reason: 'Sharing misleading information',
+          timestamp: new Date(Date.now() - 45 * 60 * 1000).toISOString(), // 45 minutes ago
+          status: 'pending'
+        }
+      ]
+    };
+    
     setCommunities([...communities, newComm]);
     setJoinedCommunities([...joinedCommunities, newCommunity.name]);
     setNewCommunity({ name: '', description: '', rules: '' });
     setView('community');
     setCurrentCommunity(newComm);
+  };
+
+  // Report user functionality
+  const handleReportUser = (reportedUser) => {
+    if (reportedUser === username) return;
+    setReportingUser(reportedUser);
+    setShowReportModal(true);
+  };
+
+  const submitReport = () => {
+    if (!reportReason.trim() || !reportingUser) return;
+    
+    const updatedCommunities = communities.map(c => {
+      if (c.name === currentCommunity.name) {
+        const existingReport = c.reports.find(r => r.reportedUser === reportingUser && r.reportedBy === username);
+        if (existingReport) {
+          return {
+            ...c,
+            reports: c.reports.map(r => 
+              r.reportedUser === reportingUser && r.reportedBy === username 
+                ? { ...r, reason: reportReason, timestamp: new Date().toISOString() }
+                : r
+            )
+          };
+        } else {
+          return {
+            ...c,
+            reports: [...c.reports, {
+              reportedUser: reportingUser,
+              reportedBy: username,
+              reason: reportReason,
+              timestamp: new Date().toISOString(),
+              status: 'pending'
+            }]
+          };
+        }
+      }
+      return c;
+    });
+    
+    setCommunities(updatedCommunities);
+    setCurrentCommunity(updatedCommunities.find(c => c.name === currentCommunity.name));
+    setShowReportModal(false);
+    setReportingUser(null);
+    setReportReason('');
+  };
+
+  // Kick user functionality (only for admins)
+  const handleKickUser = (userToKickOut) => {
+    setUserToKick(userToKickOut);
+    setShowKickConfirmModal(true);
+  };
+
+  const confirmKickUser = () => {
+    if (!userToKick) return;
+    
+    const updatedCommunities = communities.map(c => {
+      if (c.name === currentCommunity.name) {
+        return {
+          ...c,
+          members: c.members.filter(member => member !== userToKick),
+          admins: c.admins.filter(admin => admin !== userToKick), // Remove from admins too if they were admin
+          reports: c.reports.filter(r => r.reportedUser !== userToKick)
+        };
+      }
+      return c;
+    });
+    
+    setCommunities(updatedCommunities);
+    setCurrentCommunity(updatedCommunities.find(c => c.name === currentCommunity.name));
+    
+    if (userToKick === username) {
+      setJoinedCommunities(joinedCommunities.filter(name => name !== currentCommunity.name));
+      const remainingCommunities = joinedCommunities.filter(name => name !== currentCommunity.name);
+      if (remainingCommunities.length > 0) {
+        const nextCommunity = communities.find(c => c.name === remainingCommunities[0]);
+        setCurrentCommunity(nextCommunity);
+      } else {
+        setView('search');
+      }
+    }
+    
+    setShowKickConfirmModal(false);
+    setUserToKick(null);
+  };
+
+  // Admin management functions
+  const handlePromoteToAdmin = (userToPromoteToAdmin) => {
+    setUserToPromote(userToPromoteToAdmin);
+    setShowPromoteModal(true);
+  };
+
+  const confirmPromoteToAdmin = () => {
+    if (!userToPromote) return;
+    
+    const updatedCommunities = communities.map(c => {
+      if (c.name === currentCommunity.name) {
+        return {
+          ...c,
+          admins: [...c.admins, userToPromote]
+        };
+      }
+      return c;
+    });
+    
+    setCommunities(updatedCommunities);
+    setCurrentCommunity(updatedCommunities.find(c => c.name === currentCommunity.name));
+    setShowPromoteModal(false);
+    setUserToPromote(null);
+  };
+
+  const handleDemoteFromAdmin = (userToDemoteFromAdmin) => {
+    if (userToDemoteFromAdmin === currentCommunity.lead) {
+      alert("Cannot demote the original community creator!");
+      return;
+    }
+    setUserToDemote(userToDemoteFromAdmin);
+    setShowDemoteModal(true);
+  };
+
+  const confirmDemoteFromAdmin = () => {
+    if (!userToDemote) return;
+    
+    const updatedCommunities = communities.map(c => {
+      if (c.name === currentCommunity.name) {
+        return {
+          ...c,
+          admins: c.admins.filter(admin => admin !== userToDemote)
+        };
+      }
+      return c;
+    });
+    
+    setCommunities(updatedCommunities);
+    setCurrentCommunity(updatedCommunities.find(c => c.name === currentCommunity.name));
+    setShowDemoteModal(false);
+    setUserToDemote(null);
+  };
+
+  // Check if current user is admin
+  const isCurrentUserAdmin = () => {
+    return currentCommunity && currentCommunity.admins.includes(username);
+  };
+
+  // Check if current user is original creator
+  const isCurrentUserOriginalCreator = () => {
+    return currentCommunity && currentCommunity.lead === username;
+  };
+
+  // Get pending reports count
+  const getPendingReportsCount = () => {
+    return currentCommunity ? currentCommunity.reports.filter(r => r.status === 'pending').length : 0;
+  };
+
+  // Get unique reported users with report counts
+  const getReportedUsers = () => {
+    if (!currentCommunity) return [];
+    
+    const userReports = {};
+    currentCommunity.reports.forEach(report => {
+      if (!userReports[report.reportedUser]) {
+        userReports[report.reportedUser] = [];
+      }
+      userReports[report.reportedUser].push(report);
+    });
+    
+    return Object.entries(userReports).map(([user, reports]) => ({
+      user,
+      reports,
+      count: reports.length
+    }));
+  };
+
+  // Get regular members (non-admins)
+  const getRegularMembers = () => {
+    if (!currentCommunity) return [];
+    return currentCommunity.members.filter(member => 
+      !currentCommunity.admins.includes(member)
+    );
+  };
+
+  // Get admin members (excluding current user if they want to see who else is admin)
+  const getAdminMembers = () => {
+    if (!currentCommunity) return [];
+    return currentCommunity.admins;
   };
 
   const filteredCommunities = communities.filter(c =>
@@ -151,19 +572,29 @@ const CommunitiesPage = () => {
   const handleSwitchView = (newView) => {
     setView(newView);
     setPendingJoinCommunity(null);
+    setShowReportsPanel(false);
+    setShowAdminPanel(false);
   };
 
   return (
     <div className="flex h-screen bg-[#0D0D0D] text-white relative">
       {/* Sidebar */}
       <div className="w-20 bg-[#1A1A1A] flex flex-col items-center p-4 space-y-6 border-r border-[#333]">
-        <div className="text-2xl font-bold text-[#A259FF] mb-4"><CgProfile /></div>
+        <button 
+          onClick={handleProfileClick}
+          className="text-2xl font-bold text-[#A259FF] mb-4 hover:text-[#8B46FF] transition-colors duration-200"
+          title="Go to Profile"
+        >
+          <CgProfile />
+        </button>
         {joinedCommunities.map(name => (
           <button
             key={name}
             onClick={() => {
               setCurrentCommunity(communities.find(c => c.name === name));
               setView('community');
+              setShowReportsPanel(false);
+              setShowAdminPanel(false);
             }}
             className={`w-12 h-12 rounded-lg text-lg font-bold transition-all duration-200 flex items-center justify-center ${
               currentCommunity.name === name 
@@ -203,14 +634,195 @@ const CommunitiesPage = () => {
           <div className="p-6">
             {/* Community Header */}
             <div className="mb-8 pb-6 border-b border-[#333]">
-              <h2 className="text-3xl font-bold mb-2">{currentCommunity.name}</h2>
-              <p className="text-[#B3B3B3] text-lg">{currentCommunity.description}</p>
-              <div className="flex items-center mt-4 space-x-4 text-sm text-[#B3B3B3]">
-                <span>{currentCommunity.posts.length} posts</span>
-                <span>•</span>
-                <span>{joinedCommunities.length} communities joined</span>
+              <div className="flex justify-between items-start">
+                <div>
+                  <h2 className="text-3xl font-bold mb-2">{currentCommunity.name}</h2>
+                  <p className="text-[#B3B3B3] text-lg">{currentCommunity.description}</p>
+                  <div className="flex items-center mt-4 space-x-4 text-sm text-[#B3B3B3]">
+                    <span>{currentCommunity.posts.length} posts</span>
+                    <span>•</span>
+                    <span>{currentCommunity.members.length} members</span>
+                    <span>•</span>
+                    <span className="flex items-center space-x-1">
+                      <FaCrown className="text-[#FFD700]" />
+                      <span>Creator: {currentCommunity.lead}</span>
+                    </span>
+                    <span>•</span>
+                    <span className="flex items-center space-x-1">
+                      <FaUserShield className="text-[#A259FF]" />
+                      <span>{currentCommunity.admins.length} admin(s)</span>
+                    </span>
+                  </div>
+                </div>
+                
+                {/* Admin Actions */}
+                {isCurrentUserAdmin() && (
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => setShowReportsPanel(!showReportsPanel)}
+                      className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors duration-200 relative ${
+                        showReportsPanel 
+                          ? 'bg-[#EF4444] text-white' 
+                          : 'bg-[#2A2A2A] text-[#B3B3B3] hover:bg-[#333] hover:text-white'
+                      }`}
+                    >
+                      <FaBell />
+                      <span>Reports</span>
+                      {getPendingReportsCount() > 0 && (
+                        <span className="absolute -top-2 -right-2 bg-[#EF4444] text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                          {getPendingReportsCount()}
+                        </span>
+                      )}
+                    </button>
+                    
+                    {/* Admin Management Button (Only for original creator) */}
+                    {isCurrentUserOriginalCreator() && (
+                      <button
+                        onClick={() => setShowAdminPanel(!showAdminPanel)}
+                        className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors duration-200 ${
+                          showAdminPanel 
+                            ? 'bg-[#A259FF] text-white' 
+                            : 'bg-[#2A2A2A] text-[#B3B3B3] hover:bg-[#333] hover:text-white'
+                        }`}
+                      >
+                        <FaUserShield />
+                        <span>Manage Admins</span>
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
+
+            {/* Admin Management Panel (Only visible to original creator) */}
+            {showAdminPanel && isCurrentUserOriginalCreator() && (
+              <div className="mb-6 bg-[#1A1A1A] border border-[#333] rounded-xl p-6">
+                <h3 className="text-xl font-bold mb-4 flex items-center space-x-2">
+                  <FaUserShield className="text-[#A259FF]" />
+                  <span>Admin Management</span>
+                </h3>
+                
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Current Admins */}
+                  <div>
+                    <h4 className="text-lg font-semibold mb-3 text-[#A259FF]">Current Admins ({currentCommunity.admins.length})</h4>
+                    {getAdminMembers().length === 0 ? (
+                      <p className="text-[#B3B3B3]">No admins assigned yet.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {getAdminMembers().map(admin => (
+                          <div key={admin} className="flex items-center justify-between bg-[#0D0D0D] border border-[#333] rounded-lg p-3">
+                            <div className="flex items-center space-x-3">
+                              <div className="w-8 h-8 bg-[#A259FF] rounded-full flex items-center justify-center text-white text-sm font-bold">
+                                {admin[0].toUpperCase()}
+                              </div>
+                              <div>
+                                <span className="font-medium">{admin}</span>
+                                {admin === currentCommunity.lead && (
+                                  <span className="ml-2 bg-[#FFD700] text-black text-xs px-2 py-1 rounded-full">Creator</span>
+                                )}
+                                {admin === username && (
+                                  <span className="ml-2 bg-[#10b981] text-white text-xs px-2 py-1 rounded-full">You</span>
+                                )}
+                              </div>
+                            </div>
+                            
+                            {/* Only show demote button for non-creators */}
+                            {admin !== currentCommunity.lead && (
+                              <button
+                                onClick={() => handleDemoteFromAdmin(admin)}
+                                className="bg-[#EF4444] hover:bg-[#DC2626] px-3 py-1 rounded text-sm transition-colors duration-200"
+                              >
+                                Demote
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Regular Members */}
+                  <div>
+                    <h4 className="text-lg font-semibold mb-3 text-[#10b981]">Members ({getRegularMembers().length})</h4>
+                    {getRegularMembers().length === 0 ? (
+                      <p className="text-[#B3B3B3]">All members are admins.</p>
+                    ) : (
+                      <div className="space-y-2 max-h-60 overflow-y-auto">
+                        {getRegularMembers().map(member => (
+                          <div key={member} className="flex items-center justify-between bg-[#0D0D0D] border border-[#333] rounded-lg p-3">
+                            <div className="flex items-center space-x-3">
+                              <div className="w-8 h-8 bg-[#10b981] rounded-full flex items-center justify-center text-white text-sm font-bold">
+                                {member[0].toUpperCase()}
+                              </div>
+                              <span className="font-medium">{member}</span>
+                              {member === username && (
+                                <span className="ml-2 bg-[#10b981] text-white text-xs px-2 py-1 rounded-full">You</span>
+                              )}
+                            </div>
+                            
+                            <button
+                              onClick={() => handlePromoteToAdmin(member)}
+                              className="bg-[#A259FF] hover:bg-[#8B46FF] px-3 py-1 rounded text-sm transition-colors duration-200"
+                            >
+                              Promote to Admin
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Reports Panel (Only visible to admins) */}
+            {showReportsPanel && isCurrentUserAdmin() && (
+              <div className="mb-6 bg-[#1A1A1A] border border-[#333] rounded-xl p-6">
+                <h3 className="text-xl font-bold mb-4 flex items-center space-x-2">
+                  <FaExclamationTriangle className="text-[#EF4444]" />
+                  <span>Reported Users</span>
+                </h3>
+                
+                {getReportedUsers().length === 0 ? (
+                  <p className="text-[#B3B3B3]">No reports at this time.</p>
+                ) : (
+                  <div className="space-y-4">
+                    {getReportedUsers().map(({ user, reports, count }) => (
+                      <div key={user} className="bg-[#0D0D0D] border border-[#333] rounded-lg p-4">
+                        <div className="flex justify-between items-start mb-3">
+                          <div>
+                            <h4 className="font-semibold text-[#EF4444]">{user}</h4>
+                            <p className="text-sm text-[#B3B3B3]">{count} report(s)</p>
+                          </div>
+                          <button
+                            onClick={() => handleKickUser(user)}
+                            className="flex items-center space-x-2 bg-[#EF4444] hover:bg-[#DC2626] px-3 py-1 rounded-lg text-sm transition-colors duration-200"
+                          >
+                            <FaUserTimes />
+                            <span>Kick User</span>
+                          </button>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          {reports.map((report, index) => (
+                            <div key={index} className="bg-[#1A1A1A] border border-[#333] rounded p-3">
+                              <div className="text-sm text-[#B3B3B3] mb-1">
+                                Reported by: <span className="text-[#A259FF]">{report.reportedBy}</span>
+                              </div>
+                              <div className="text-sm">{report.reason}</div>
+                              <div className="text-xs text-[#666] mt-1">
+                                {new Date(report.timestamp).toLocaleString()}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Posts */}
             <div className="space-y-6">
@@ -224,10 +836,35 @@ const CommunitiesPage = () => {
                           {post.user[0].toUpperCase()}
                         </div>
                         <div>
-                          <div className="font-semibold">{post.user}</div>
+                          <div className="flex items-center space-x-2">
+                            <span className="font-semibold">{post.user}</span>
+                            {post.user === currentCommunity.lead && (
+                              <span className="bg-[#FFD700] text-black text-xs px-2 py-1 rounded-full flex items-center space-x-1">
+                                <FaCrown size={10} />
+                                <span>Creator</span>
+                              </span>
+                            )}
+                            {currentCommunity.admins.includes(post.user) && post.user !== currentCommunity.lead && (
+                              <span className="bg-[#A259FF] text-white text-xs px-2 py-1 rounded-full flex items-center space-x-1">
+                                <FaUserShield size={10} />
+                                <span>Admin</span>
+                              </span>
+                            )}
+                          </div>
                           <div className="text-sm text-[#B3B3B3]">2 hours ago</div>
                         </div>
                       </div>
+                      
+                      {/* Report Button (Only for regular members, not for admins or yourself) */}
+                      {post.user !== username && !isCurrentUserAdmin() && !currentCommunity.admins.includes(post.user) && (
+                        <button
+                          onClick={() => handleReportUser(post.user)}
+                          className="flex items-center space-x-1 text-[#B3B3B3] hover:text-[#EF4444] transition-colors duration-200 text-sm"
+                        >
+                          <FaFlag />
+                          <span>Report</span>
+                        </button>
+                      )}
                     </div>
                     <h3 className="font-bold text-xl mb-3">{post.title}</h3>
                     <p className="text-[#E0E0E0] leading-relaxed">{post.content}</p>
@@ -294,7 +931,32 @@ const CommunitiesPage = () => {
                             </div>
                             <div className="flex-1">
                               <div className="bg-[#1A1A1A] rounded-lg p-3 border border-[#333]">
-                                <div className="font-medium text-[#A259FF] text-sm mb-1">{comment.user}</div>
+                                <div className="flex items-center justify-between mb-1">
+                                  <div className="flex items-center space-x-2">
+                                    <span className="font-medium text-[#A259FF] text-sm">{comment.user}</span>
+                                    {comment.user === currentCommunity.lead && (
+                                      <span className="bg-[#FFD700] text-black text-xs px-1 py-0.5 rounded flex items-center space-x-1">
+                                        <FaCrown size={8} />
+                                        <span>Creator</span>
+                                      </span>
+                                    )}
+                                    {currentCommunity.admins.includes(comment.user) && comment.user !== currentCommunity.lead && (
+                                      <span className="bg-[#A259FF] text-white text-xs px-1 py-0.5 rounded flex items-center space-x-1">
+                                        <FaUserShield size={8} />
+                                        <span>Admin</span>
+                                      </span>
+                                    )}
+                                  </div>
+                                  {/* Report Comment User */}
+                                  {comment.user !== username && !isCurrentUserAdmin() && !currentCommunity.admins.includes(comment.user) && (
+                                    <button
+                                      onClick={() => handleReportUser(comment.user)}
+                                      className="text-[#B3B3B3] hover:text-[#EF4444] transition-colors duration-200"
+                                    >
+                                      <FaFlag className="text-xs" />
+                                    </button>
+                                  )}
+                                </div>
                                 <div className="text-[#E0E0E0]">{comment.text}</div>
                               </div>
                               <div className="text-xs text-[#B3B3B3] mt-1 ml-3">Just now</div>
@@ -377,7 +1039,21 @@ const CommunitiesPage = () => {
                     <div className="flex-1">
                       <h3 className="font-bold text-xl mb-2">{c.name}</h3>
                       <p className="text-[#B3B3B3] mb-4">{c.description}</p>
-                      <div className="text-sm text-[#B3B3B3]">{c.posts.length} posts</div>
+                      <div className="text-sm text-[#B3B3B3] flex items-center space-x-4">
+                        <span>{c.posts.length} posts</span>
+                        <span>•</span>
+                        <span>{c.members.length} members</span>
+                        <span>•</span>
+                        <span className="flex items-center space-x-1">
+                          <FaCrown className="text-[#FFD700]" />
+                          <span>Creator: {c.lead}</span>
+                        </span>
+                        <span>•</span>
+                        <span className="flex items-center space-x-1">
+                          <FaUserShield className="text-[#A259FF]" />
+                          <span>{c.admins.length} admin(s)</span>
+                        </span>
+                      </div>
                     </div>
                     <button
                       onClick={() => handleJoin(c)}
@@ -436,6 +1112,11 @@ const CommunitiesPage = () => {
                       className="w-full p-4 bg-[#0D0D0D] border border-[#333] rounded-lg text-white placeholder-[#B3B3B3] focus:outline-none focus:ring-2 focus:ring-[#A259FF] focus:border-transparent resize-none"
                     />
                   </div>
+                  <div className="bg-[#0D0D0D] border border-[#333] rounded-lg p-4">
+                    <p className="text-sm text-[#B3B3B3]">
+                      <strong className="text-[#A259FF]">Note:</strong> As the community creator, you will become the original creator with full administrative privileges including the ability to assign other members as admins, review reports, and remove disruptive members.
+                    </p>
+                  </div>
                   <button 
                     onClick={handleCreateCommunity} 
                     className="w-full bg-[#A259FF] hover:bg-[#8B46FF] py-4 rounded-lg font-semibold transition-colors duration-200"
@@ -444,6 +1125,143 @@ const CommunitiesPage = () => {
                     Create Community
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Promote to Admin Modal */}
+        {showPromoteModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
+            <div className="bg-[#1A1A1A] border border-[#333] p-8 rounded-xl w-full max-w-md">
+              <h3 className="text-xl font-bold mb-4 flex items-center space-x-2">
+                <FaUserShield className="text-[#A259FF]" />
+                <span>Promote to Admin</span>
+              </h3>
+              <p className="text-[#B3B3B3] mb-6">
+                Are you sure you want to promote <strong className="text-white">{userToPromote}</strong> to admin? They will have moderation privileges including the ability to review reports and kick users.
+              </p>
+              <div className="flex justify-end space-x-4">
+                <button 
+                  onClick={() => {
+                    setShowPromoteModal(false);
+                    setUserToPromote(null);
+                  }} 
+                  className="px-6 py-2 text-[#B3B3B3] hover:text-white transition-colors duration-200"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={confirmPromoteToAdmin} 
+                  className="bg-[#A259FF] hover:bg-[#8B46FF] px-6 py-2 rounded-lg font-semibold transition-colors duration-200"
+                >
+                  Promote to Admin
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Demote from Admin Modal */}
+        {showDemoteModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
+            <div className="bg-[#1A1A1A] border border-[#333] p-8 rounded-xl w-full max-w-md">
+              <h3 className="text-xl font-bold mb-4 flex items-center space-x-2">
+                <FaUserTimes className="text-[#EF4444]" />
+                <span>Demote from Admin</span>
+              </h3>
+              <p className="text-[#B3B3B3] mb-6">
+                Are you sure you want to demote <strong className="text-white">{userToDemote}</strong> from admin? They will lose all moderation privileges.
+              </p>
+              <div className="flex justify-end space-x-4">
+                <button 
+                  onClick={() => {
+                    setShowDemoteModal(false);
+                    setUserToDemote(null);
+                  }} 
+                  className="px-6 py-2 text-[#B3B3B3] hover:text-white transition-colors duration-200"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={confirmDemoteFromAdmin} 
+                  className="bg-[#EF4444] hover:bg-[#DC2626] px-6 py-2 rounded-lg font-semibold transition-colors duration-200"
+                >
+                  Demote from Admin
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Report User Modal */}
+        {showReportModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
+            <div className="bg-[#1A1A1A] border border-[#333] p-8 rounded-xl w-full max-w-md">
+              <h3 className="text-xl font-bold mb-4 flex items-center space-x-2">
+                <FaFlag className="text-[#EF4444]" />
+                <span>Report User: {reportingUser}</span>
+              </h3>
+              <div className="mb-6">
+                <label className="block text-sm font-medium mb-2">Reason for reporting:</label>
+                <textarea
+                  value={reportReason}
+                  onChange={e => setReportReason(e.target.value)}
+                  placeholder="Please describe why you're reporting this user..."
+                  rows={4}
+                  className="w-full p-3 bg-[#0D0D0D] border border-[#333] rounded-lg text-white placeholder-[#B3B3B3] focus:outline-none focus:ring-2 focus:ring-[#A259FF] focus:border-transparent resize-none"
+                />
+              </div>
+              <div className="flex justify-end space-x-4">
+                <button 
+                  onClick={() => {
+                    setShowReportModal(false);
+                    setReportingUser(null);
+                    setReportReason('');
+                  }} 
+                  className="px-6 py-2 text-[#B3B3B3] hover:text-white transition-colors duration-200"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={submitReport} 
+                  className="bg-[#EF4444] hover:bg-[#DC2626] px-6 py-2 rounded-lg font-semibold transition-colors duration-200"
+                  disabled={!reportReason.trim()}
+                >
+                  Submit Report
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Kick User Confirmation Modal */}
+        {showKickConfirmModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
+            <div className="bg-[#1A1A1A] border border-[#333] p-8 rounded-xl w-full max-w-md">
+              <h3 className="text-xl font-bold mb-4 flex items-center space-x-2">
+                <FaUserTimes className="text-[#EF4444]" />
+                <span>Kick User</span>
+              </h3>
+              <p className="text-[#B3B3B3] mb-6">
+                Are you sure you want to kick <strong className="text-white">{userToKick}</strong> from the community? This action cannot be undone.
+              </p>
+              <div className="flex justify-end space-x-4">
+                <button 
+                  onClick={() => {
+                    setShowKickConfirmModal(false);
+                    setUserToKick(null);
+                  }} 
+                  className="px-6 py-2 text-[#B3B3B3] hover:text-white transition-colors duration-200"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={confirmKickUser} 
+                  className="bg-[#EF4444] hover:bg-[#DC2626] px-6 py-2 rounded-lg font-semibold transition-colors duration-200"
+                >
+                  Kick User
+                </button>
               </div>
             </div>
           </div>
@@ -570,4 +1388,5 @@ const CommunitiesPage = () => {
     </div>
   );
 };
+
 export default CommunitiesPage;

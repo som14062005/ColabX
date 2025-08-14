@@ -41,7 +41,7 @@ const UserProfile = ({ userData, onBack, isOwnProfile = true }) => {
         email: 'alex.johnson@email.com',
         phone: '+1 (555) 123-4567',
         bio: 'Passionate developer with 5+ years of experience in building scalable web applications. Love working with modern technologies and contributing to open-source projects.',
-        avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face',
+        avatar: '',
         skills: ['React', 'Node.js', 'Python', 'TypeScript', 'AWS', 'Docker'],
         walletAddress: '',
         links: {

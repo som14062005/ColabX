@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import Editor from "@monaco-editor/react";
-import { Users, Plus, Upload, Trash2, Code, Wifi, WifiOff, Eye, Download, Settings, Terminal, AlertCircle, ChevronDown, MessageCircle, FileText, CheckSquare, GitBranch, PenTool } from "lucide-react";
-import { useNavigate } from 'react-router-dom';
+import { Users, Plus, Upload, Trash2, Code, Wifi, WifiOff, Eye, Download, Settings, Terminal, AlertCircle, User, ChevronDown, MessageCircle, FileText, CheckSquare, GitBranch, PenTool } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 export default function CollabWorkspace() {
   const navigate = useNavigate();
@@ -20,7 +20,7 @@ export default function CollabWorkspace() {
   const [showPresence, setShowPresence] = useState(true);
   const [roomId, setRoomId] = useState("demo-room");
   const [showWorkspaceDropdown, setShowWorkspaceDropdown] = useState(false);
-  
+
   // WebSocket and collaboration refs
   const wsRef = useRef(null);
   const editorRef = useRef(null);
@@ -28,11 +28,11 @@ export default function CollabWorkspace() {
   const userColorRef = useRef(generateRandomColor());
   const reconnectTimeoutRef = useRef(null);
   const isUnmountingRef = useRef(false);
-  const dropdownRef = useRef(null);
-  
-  // Operation queue for handling conflicts
   const operationQueueRef = useRef([]);
   const isProcessingRef = useRef(false);
+  const pendingFileSwitch = useRef(null);
+  const lastSyncedContent = useRef(new Map());
+  const dropdownRef = useRef(null);
 
   // Workspace features data
   const workspaceFeatures = [
@@ -47,7 +47,7 @@ export default function CollabWorkspace() {
   // Generate a random color for the user
   function generateRandomColor() {
     const colors = [
-      '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', 
+      '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
       '#06b6d4', '#84cc16', '#f97316', '#ec4899', '#6366f1'
     ];
     return colors[Math.floor(Math.random() * colors.length)];
@@ -69,52 +69,70 @@ export default function CollabWorkspace() {
 
   const handleWorkspaceFeatureClick = (feature) => {
     if (!feature.isActive) {
-      // Navigate to the corresponding route
       navigate(feature.route);
     }
     setShowWorkspaceDropdown(false);
   };
 
+  // Queue operations to prevent race conditions
+  const processOperationQueue = useCallback(() => {
+    if (isProcessingRef.current || operationQueueRef.current.length === 0) {
+      return;
+    }
+
+    isProcessingRef.current = true;
+    const operation = operationQueueRef.current.shift();
+    
+    try {
+      operation();
+    } catch (error) {
+      console.error('Error processing queued operation:', error);
+    } finally {
+      isProcessingRef.current = false;
+      // Process next operation after a short delay
+      setTimeout(processOperationQueue, 10);
+    }
+  }, []);
+
+  // Add operation to queue
+  const queueOperation = useCallback((operation) => {
+    operationQueueRef.current.push(operation);
+    processOperationQueue();
+  }, [processOperationQueue]);
+
   // WebSocket connection management with proper cleanup
   const connectWebSocket = useCallback(() => {
-    // Prevent multiple connections
-    if (wsRef.current?.readyState === WebSocket.OPEN || 
-        wsRef.current?.readyState === WebSocket.CONNECTING) {
+    if (wsRef.current?.readyState === WebSocket.OPEN || wsRef.current?.readyState === WebSocket.CONNECTING) {
       console.log('🔄 WebSocket already connected or connecting, skipping...');
       return;
     }
 
-    // Don't connect if component is unmounting
     if (isUnmountingRef.current) {
       console.log('🛑 Component unmounting, aborting connection');
       return;
     }
-    
-    // Close and cleanup any existing connection
+
     if (wsRef.current) {
       console.log('🧹 Cleaning up existing connection');
       wsRef.current.close();
       wsRef.current = null;
     }
-    
+
     try {
       const wsUrl = `ws://localhost:8080/collab`;
       console.log('🔌 Creating NEW WebSocket connection to:', wsUrl);
-      
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
-      
+
       ws.onopen = () => {
         if (isUnmountingRef.current) {
           ws.close();
           return;
         }
-        
         setConnected(true);
         setConnectionError(null);
         console.log('✅ WebSocket connected successfully');
-        
-        // Send join message
+
         ws.send(JSON.stringify({
           type: 'join',
           user: {
@@ -125,29 +143,26 @@ export default function CollabWorkspace() {
           roomId
         }));
       };
-      
+
       ws.onmessage = (event) => {
         if (isUnmountingRef.current) return;
-        
         try {
           const message = JSON.parse(event.data);
-          handleWebSocketMessage(message);
+          queueOperation(() => handleWebSocketMessage(message));
         } catch (error) {
           console.error('❌ Failed to parse WebSocket message:', error);
         }
       };
-      
+
       ws.onclose = (event) => {
         console.log(`🔌 WebSocket closed. Code: ${event.code}, Reason: ${event.reason}`);
         setConnected(false);
         setActiveUsers(new Map());
-        
-        // Clear reconnect timeout if exists
+
         if (reconnectTimeoutRef.current) {
           clearTimeout(reconnectTimeoutRef.current);
         }
-        
-        // Only attempt reconnect if not intentionally unmounting
+
         if (!isUnmountingRef.current && event.code !== 1000) {
           console.log('🔄 Attempting to reconnect in 3 seconds...');
           reconnectTimeoutRef.current = setTimeout(() => {
@@ -157,17 +172,17 @@ export default function CollabWorkspace() {
           }, 3000);
         }
       };
-      
+
       ws.onerror = (error) => {
         console.error('❌ WebSocket error:', error);
         setConnectionError('Connection failed - check if server is running');
       };
-      
+
     } catch (error) {
       setConnectionError('Unable to establish WebSocket connection');
       console.error('❌ WebSocket connection error:', error);
     }
-  }, [roomId, username]); // Only depend on roomId and username
+  }, [roomId, username, queueOperation]);
 
   // Handle incoming WebSocket messages
   const handleWebSocketMessage = useCallback((message) => {
@@ -197,12 +212,88 @@ export default function CollabWorkspace() {
         break;
         
       case 'file-list':
-        // Sync file list
+        // Sync file list and update local files
         const newFiles = new Map();
         Object.entries(message.files).forEach(([filename, content]) => {
           newFiles.set(filename, content);
+          lastSyncedContent.current.set(filename, content);
         });
         setFiles(newFiles);
+        console.log('📄 Synced files from server:', Array.from(newFiles.keys()));
+        
+        // Handle pending file switch
+        if (pendingFileSwitch.current && newFiles.has(pendingFileSwitch.current)) {
+          const pendingFile = pendingFileSwitch.current;
+          pendingFileSwitch.current = null;
+          
+          // Update editor content if needed
+          if (editorRef.current && pendingFile === activeFile) {
+            const content = newFiles.get(pendingFile);
+            const currentContent = editorRef.current.getValue();
+            if (content !== currentContent) {
+              isLocalChangeRef.current = true;
+              editorRef.current.setValue(content);
+              setTimeout(() => { isLocalChangeRef.current = false; }, 100);
+            }
+          }
+        }
+        break;
+        
+      case 'file-created':
+        if (message.userId !== username) {
+          setFiles(prev => {
+            const newFiles = new Map(prev);
+            newFiles.set(message.filename, message.content);
+            lastSyncedContent.current.set(message.filename, message.content);
+            return newFiles;
+          });
+          console.log(`📄 File created by ${message.userId}: ${message.filename}`);
+        }
+        break;
+        
+      case 'file-deleted':
+        if (message.userId !== username) {
+          setFiles(prev => {
+            const newFiles = new Map(prev);
+            newFiles.delete(message.filename);
+            lastSyncedContent.current.delete(message.filename);
+            return newFiles;
+          });
+          
+          if (message.filename === activeFile) {
+            setFiles(currentFiles => {
+              const remaining = Array.from(currentFiles.keys()).filter(f => f !== message.filename);
+              if (remaining.length > 0) {
+                setActiveFile(remaining[0]);
+              }
+              return currentFiles;
+            });
+          }
+          console.log(`🗑️ File deleted by ${message.userId}: ${message.filename}`);
+        }
+        break;
+
+      case 'file-content':
+        if (message.filename && message.content !== undefined) {
+          setFiles(prev => {
+            const newFiles = new Map(prev);
+            newFiles.set(message.filename, message.content);
+            lastSyncedContent.current.set(message.filename, message.content);
+            return newFiles;
+          });
+          
+          // Update editor if this is the active file
+          if (message.filename === activeFile && editorRef.current) {
+            const currentContent = editorRef.current.getValue();
+            if (message.content !== currentContent) {
+              isLocalChangeRef.current = true;
+              editorRef.current.setValue(message.content);
+              setTimeout(() => { isLocalChangeRef.current = false; }, 100);
+            }
+          }
+          
+          console.log(`📄 File content synced: ${message.filename}`);
+        }
         break;
         
       case 'error':
@@ -213,67 +304,145 @@ export default function CollabWorkspace() {
       default:
         console.warn('Unknown message type:', message.type);
     }
+  }, [username, activeFile]);
+
+  // Apply text operation to content
+  const applyOperationToContent = useCallback((content, operation) => {
+    try {
+      const lines = content.split('\n');
+      
+      switch (operation.type) {
+        case 'insert':
+          const lineIndex = Math.max(0, Math.min(operation.position.lineNumber - 1, lines.length - 1));
+          const columnIndex = Math.max(0, Math.min(operation.position.column - 1, lines[lineIndex]?.length || 0));
+          
+          if (lines[lineIndex] !== undefined) {
+            lines[lineIndex] = lines[lineIndex].slice(0, columnIndex) + 
+                              operation.text + 
+                              lines[lineIndex].slice(columnIndex);
+          }
+          break;
+
+        case 'delete':
+          const startLine = Math.max(0, Math.min(operation.range.startLineNumber - 1, lines.length - 1));
+          const endLine = Math.max(0, Math.min(operation.range.endLineNumber - 1, lines.length - 1));
+          const startCol = Math.max(0, Math.min(operation.range.startColumn - 1, lines[startLine]?.length || 0));
+          const endCol = Math.max(0, Math.min(operation.range.endColumn - 1, lines[endLine]?.length || 0));
+
+          if (startLine === endLine && lines[startLine] !== undefined) {
+            lines[startLine] = lines[startLine].slice(0, startCol) + 
+                              lines[startLine].slice(endCol);
+          } else if (lines[startLine] !== undefined && lines[endLine] !== undefined) {
+            lines[startLine] = lines[startLine].slice(0, startCol) + 
+                              lines[endLine].slice(endCol);
+            lines.splice(startLine + 1, endLine - startLine);
+          }
+          break;
+
+        case 'replace':
+          const rStartLine = Math.max(0, Math.min(operation.range.startLineNumber - 1, lines.length - 1));
+          const rEndLine = Math.max(0, Math.min(operation.range.endLineNumber - 1, lines.length - 1));
+          const rStartCol = Math.max(0, Math.min(operation.range.startColumn - 1, lines[rStartLine]?.length || 0));
+          const rEndCol = Math.max(0, Math.min(operation.range.endColumn - 1, lines[rEndLine]?.length || 0));
+
+          if (rStartLine === rEndLine && lines[rStartLine] !== undefined) {
+            lines[rStartLine] = lines[rStartLine].slice(0, rStartCol) + 
+                              operation.text + 
+                              lines[rStartLine].slice(rEndCol);
+          } else if (lines[rStartLine] !== undefined && lines[rEndLine] !== undefined) {
+            const newText = operation.text.split('\n');
+            lines[rStartLine] = lines[rStartLine].slice(0, rStartCol) + newText[0];
+            
+            if (newText.length > 1) {
+              lines.splice(rStartLine + 1, rEndLine - rStartLine, ...newText.slice(1, -1));
+              if (lines[rStartLine + newText.length - 1] !== undefined) {
+                lines[rStartLine + newText.length - 1] = newText[newText.length - 1] + 
+                                                         lines[rEndLine].slice(rEndCol);
+              }
+            } else {
+              lines[rStartLine] += lines[rEndLine].slice(rEndCol);
+              lines.splice(rStartLine + 1, rEndLine - rStartLine);
+            }
+          }
+          break;
+      }
+      
+      return lines.join('\n');
+    } catch (error) {
+      console.error('Error applying operation:', error);
+      return content; // Return original content if operation fails
+    }
   }, []);
 
   // Handle file operations from other users
   const handleFileOperation = useCallback((message) => {
-    if (message.userId === username) return; // Ignore own operations
+    if (message.userId === username) return;
     
     const { operation, filename } = message;
     
-    if (filename !== activeFile) return; // Only apply to current file
-    
-    const editor = editorRef.current;
-    if (!editor) return;
-    
-    isLocalChangeRef.current = true; // Prevent echoing changes
-    
-    try {
-      switch (operation.type) {
-        case 'insert':
-          editor.executeEdits('collaboration', [{
-            range: new window.monaco.Range(
-              operation.position.lineNumber,
-              operation.position.column,
-              operation.position.lineNumber,
-              operation.position.column
-            ),
-            text: operation.text
-          }]);
-          break;
-          
-        case 'delete':
-          editor.executeEdits('collaboration', [{
-            range: new window.monaco.Range(
-              operation.range.startLineNumber,
-              operation.range.startColumn,
-              operation.range.endLineNumber,
-              operation.range.endColumn
-            ),
-            text: ''
-          }]);
-          break;
-          
-        case 'replace':
-          editor.executeEdits('collaboration', [{
-            range: new window.monaco.Range(
-              operation.range.startLineNumber,
-              operation.range.startColumn,
-              operation.range.endLineNumber,
-              operation.range.endColumn
-            ),
-            text: operation.text
-          }]);
-          break;
+    // Update the file content in our local state
+    setFiles(prev => {
+      const currentContent = prev.get(filename) || '';
+      const newContent = applyOperationToContent(currentContent, operation);
+      
+      const newFiles = new Map(prev);
+      newFiles.set(filename, newContent);
+      lastSyncedContent.current.set(filename, newContent);
+      return newFiles;
+    });
+
+    // If this operation is for the currently active file, also apply it to the editor
+    if (filename === activeFile && editorRef.current) {
+      isLocalChangeRef.current = true;
+
+      try {
+        const monaco = window.monaco;
+        switch (operation.type) {
+          case 'insert':
+            editorRef.current.executeEdits('collaboration', [{
+              range: new monaco.Range(
+                operation.position.lineNumber,
+                operation.position.column,
+                operation.position.lineNumber,
+                operation.position.column
+              ),
+              text: operation.text
+            }]);
+            break;
+            
+          case 'delete':
+            editorRef.current.executeEdits('collaboration', [{
+              range: new monaco.Range(
+                operation.range.startLineNumber,
+                operation.range.startColumn,
+                operation.range.endLineNumber,
+                operation.range.endColumn
+              ),
+              text: ''
+            }]);
+            break;
+            
+          case 'replace':
+            editorRef.current.executeEdits('collaboration', [{
+              range: new monaco.Range(
+                operation.range.startLineNumber,
+                operation.range.startColumn,
+                operation.range.endLineNumber,
+                operation.range.endColumn
+              ),
+              text: operation.text
+            }]);
+            break;
+        }
+      } catch (error) {
+        console.error('Failed to apply operation to editor:', error);
       }
-    } catch (error) {
-      console.error('Failed to apply operation:', error);
+
+      setTimeout(() => {
+        isLocalChangeRef.current = false;
+      }, 100);
     }
-    
-    setTimeout(() => {
-      isLocalChangeRef.current = false;
-    }, 100);
-  }, [username, activeFile]);
+  }, [username, activeFile, applyOperationToContent]);
 
   // Handle cursor position updates
   const handleCursorUpdate = useCallback((message) => {
@@ -283,38 +452,23 @@ export default function CollabWorkspace() {
       const newUsers = new Map(prev);
       const user = newUsers.get(message.userId);
       if (user) {
-        newUsers.set(message.userId, {
-          ...user,
+        newUsers.set(message.userId, { 
+          ...user, 
           cursor: message.position,
-          filename: message.filename
+          filename: message.filename 
         });
       }
       return newUsers;
     });
   }, [username]);
 
-  // Handle room/username changes separately
-  useEffect(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      console.log('🔄 Room or username changed, rejoining...');
-      
-      // Send new join message with updated info
-      wsRef.current.send(JSON.stringify({
-        type: 'join',
-        user: {
-          id: username,
-          name: username,
-          color: userColorRef.current
-        },
-        roomId
-      }));
-    }
-  }, [roomId, username]); // Reconnect when room or username changes
-  
+  // Send message helper
   const sendMessage = useCallback((message) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(message));
+      return true;
     }
+    return false;
   }, []);
 
   // Send file operation to other users
@@ -330,92 +484,137 @@ export default function CollabWorkspace() {
 
   // Send cursor position to other users
   const sendCursorPosition = useCallback((position, filename) => {
-    sendMessage({
-      type: 'cursor-position',
-      position,
+    sendMessage({ 
+      type: 'cursor-position', 
+      position, 
+      filename,
+      userId: username, 
+      roomId 
+    });
+  }, [sendMessage, username, roomId]);
+
+  // Request file content when switching files
+  const requestFileContent = useCallback((filename) => {
+    const success = sendMessage({
+      type: 'request-file-content',
       filename,
       userId: username,
       roomId
     });
+    
+    if (success) {
+      pendingFileSwitch.current = filename;
+    }
   }, [sendMessage, username, roomId]);
 
-  // Initialize WebSocket connection with proper cleanup
+  // Initialize WebSocket connection
   useEffect(() => {
-    // Mark component as mounted
     isUnmountingRef.current = false;
-    
     console.log('🚀 Component mounted, setting up WebSocket...');
-    
-    // Small delay to prevent immediate reconnections in development
+
     const timeoutId = setTimeout(() => {
       if (!isUnmountingRef.current) {
         connectWebSocket();
       }
     }, 500);
-    
+
     return () => {
       console.log('🧹 Component unmounting, cleaning up...');
       isUnmountingRef.current = true;
-      
       clearTimeout(timeoutId);
-      
-      // Clear any pending reconnect
+
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
         reconnectTimeoutRef.current = null;
       }
-      
-      // Close WebSocket connection
+
       if (wsRef.current) {
         if (wsRef.current.readyState === WebSocket.OPEN) {
-          // Send leave message before closing
           wsRef.current.send(JSON.stringify({
             type: 'leave',
             userId: username,
             roomId
           }));
         }
-        wsRef.current.close(1000, 'Component unmounting'); // Normal closure
+        wsRef.current.close(1000, 'Component unmounting');
         wsRef.current = null;
       }
     };
-  }, []); // Empty dependency array - only run once per mount
+  }, []);
 
-  // Handle editor changes
+  // Handle room/username changes
+  useEffect(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      console.log('🔄 Room or username changed, rejoining...');
+      wsRef.current.send(JSON.stringify({
+        type: 'join',
+        user: {
+          id: username,
+          name: username,
+          color: userColorRef.current
+        },
+        roomId
+      }));
+    }
+  }, [roomId, username]);
+
+  // Handle file switching with proper sync
+  useEffect(() => {
+    if (connected && activeFile) {
+      // Request the latest file content from server
+      requestFileContent(activeFile);
+      
+      // Send cursor position for the new file
+      if (editorRef.current) {
+        const position = editorRef.current.getPosition();
+        if (position) {
+          sendCursorPosition({
+            lineNumber: position.lineNumber,
+            column: position.column
+          }, activeFile);
+        }
+      }
+    }
+  }, [activeFile, connected, sendCursorPosition, requestFileContent]);
+
+  // Handle editor changes with debouncing
   const handleEditorChange = useCallback((value, event) => {
-    if (isLocalChangeRef.current) return; // Ignore collaborative changes
-    
-    // Update local file content
+    if (isLocalChangeRef.current) return;
+
+    // Update local state immediately
     setFiles(prev => new Map(prev.set(activeFile, value || '')));
-    
-    // Convert Monaco change event to operations
-    if (event?.changes) {
+
+    // Send operations to other users
+    if (event?.changes && connected) {
       event.changes.forEach(change => {
         const operation = {
-          type: change.text ? 'replace' : 'delete',
-          range: {
+          type: change.text ? (change.rangeLength > 0 ? 'replace' : 'insert') : 'delete',
+          range: change.rangeLength > 0 ? {
             startLineNumber: change.range.startLineNumber,
             startColumn: change.range.startColumn,
             endLineNumber: change.range.endLineNumber,
             endColumn: change.range.endColumn
-          },
+          } : undefined,
+          position: change.rangeLength === 0 ? {
+            lineNumber: change.range.startLineNumber,
+            column: change.range.startColumn
+          } : undefined,
           text: change.text
         };
         
         sendFileOperation(operation, activeFile);
       });
     }
-  }, [activeFile, sendFileOperation]);
+  }, [activeFile, sendFileOperation, connected]);
 
   // Handle cursor position changes
   const handleCursorPositionChange = useCallback((event) => {
-    if (!event?.position) return;
-    
+    if (!event?.position || !connected) return;
     sendCursorPosition({
       lineNumber: event.position.lineNumber,
       column: event.position.column
     }, activeFile);
-  }, [sendCursorPosition, activeFile]);
+  }, [sendCursorPosition, activeFile, connected]);
 
   // Create new file
   const createNewFile = useCallback(() => {
@@ -430,8 +629,7 @@ export default function CollabWorkspace() {
     const newContent = "// Start coding...\n";
     setFiles(prev => new Map(prev.set(name, newContent)));
     setActiveFile(name);
-    
-    // Notify other users
+
     sendMessage({
       type: 'file-created',
       filename: name,
@@ -444,19 +642,18 @@ export default function CollabWorkspace() {
   // Delete file
   const deleteFile = useCallback((name) => {
     if (files.size <= 1) return;
-    
+
     setFiles(prev => {
       const newFiles = new Map(prev);
       newFiles.delete(name);
       return newFiles;
     });
-    
+
     if (name === activeFile) {
       const remainingFiles = Array.from(files.keys()).filter(f => f !== name);
       setActiveFile(remainingFiles[0]);
     }
-    
-    // Notify other users
+
     sendMessage({
       type: 'file-deleted',
       filename: name,
@@ -481,14 +678,13 @@ export default function CollabWorkspace() {
   const handleFileUpload = useCallback((ev) => {
     const file = ev.target.files[0];
     if (!file) return;
-    
+
     const reader = new FileReader();
     reader.onload = () => {
       const content = reader.result;
       setFiles(prev => new Map(prev.set(file.name, content)));
       setActiveFile(file.name);
-      
-      // Notify other users
+
       sendMessage({
         type: 'file-created',
         filename: file.name,
@@ -526,8 +722,7 @@ export default function CollabWorkspace() {
   // Handle editor mount
   const handleEditorMount = useCallback((editor, monaco) => {
     editorRef.current = editor;
-    
-    // Enhanced editor options
+
     editor.updateOptions({
       fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
       fontSize: 14,
@@ -541,877 +736,346 @@ export default function CollabWorkspace() {
       automaticLayout: true
     });
 
-    // Listen for cursor position changes
     editor.onDidChangeCursorPosition(handleCursorPositionChange);
+
+    let decorationIds = [];
     
-    // Display collaborative cursors
     const updateCollaborativeCursors = () => {
       const decorations = [];
+      
       activeUsers.forEach((user, userId) => {
         if (user.cursor && user.filename === activeFile && userId !== username) {
           decorations.push({
             range: new monaco.Range(
-              user.cursor.lineNumber, 
-              user.cursor.column, 
-              user.cursor.lineNumber, 
+              user.cursor.lineNumber,
+              user.cursor.column,
+              user.cursor.lineNumber,
               user.cursor.column
             ),
             options: {
               className: 'collaborative-cursor',
-              hoverMessage: { value: `${user.name} is here` },
-              beforeContentClassName: 'collaborative-cursor-label',
+              hoverMessage: { 
+                value: `**${user.name}** is editing at line ${user.cursor.lineNumber}` 
+              },
+              beforeContentClassName: 'collaborative-cursor-before',
               before: {
-                content: user.name,
-                inlineClassName: 'collaborative-cursor-name',
-                color: user.color
+                content: `${user.name}`,
+                inlineClassName: 'collaborative-cursor-label',
+                backgroundColor: user.color
               }
             }
           });
         }
       });
-      
-      editor.deltaDecorations([], decorations);
+
+      decorationIds = editor.deltaDecorations(decorationIds, decorations);
     };
 
-    // Update cursors when users change
     const interval = setInterval(updateCollaborativeCursors, 500);
-    return () => clearInterval(interval);
+    
+    return () => {
+      clearInterval(interval);
+      if (decorationIds.length > 0) {
+        editor.deltaDecorations(decorationIds, []);
+      }
+    };
   }, [handleCursorPositionChange, activeUsers, activeFile, username]);
 
   return (
-    <div className="workspace-container">
-      <style jsx>{`
-        .workspace-container {
-          display: flex;
-          height: 100vh;
-          background: #0a0e1a;
-          font-family: 'Inter', system-ui, sans-serif;
-          color: #e2e8f0;
-        }
-        
-        .sidebar {
-          width: ${sidebarCollapsed ? '60px' : '320px'};
-          background: linear-gradient(180deg, #111827 0%, #0f1629 100%);
-          border-right: 1px solid #1e293b;
-          transition: width 0.3s ease;
-          display: flex;
-          flex-direction: column;
-          position: relative;
-        }
-        
-        .sidebar::before {
-          content: '';
-          position: absolute;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background: linear-gradient(45deg, rgba(59, 130, 246, 0.1) 0%, rgba(147, 51, 234, 0.1) 100%);
-          pointer-events: none;
-        }
-        
-        .sidebar-header {
-          padding: 20px;
-          border-bottom: 1px solid #1e293b;
-          position: relative;
-          z-index: 5;
-        }
-
-        .workspace-header {
-          display: flex;
-          align-items: flex-start;
-          justify-content: space-between;
-          margin-bottom: 20px;
-          gap: 16px;
-        }
-
-        .workspace-title-section {
-          flex: 1;
-          min-width: 0;
-        }
-
-        .workspace-title {
-          font-size: 18px;
-          font-weight: bold;
-          color: white;
-          margin-bottom: 4px;
-          text-shadow: 0 2px 10px rgba(168,85,247,0.3);
-          line-height: 1.2;
-        }
-
-        .workspace-subtitle {
-          font-size: 14px;
-          color: #B3B3B3;
-          line-height: 1.2;
-        }
-
-        .workspace-dropdown {
-          position: relative;
-          flex-shrink: 0;
-        }
-
-        .workspace-dropdown-button {
-          padding: 10px;
-          border-radius: 12px;
-          border: 1px solid rgba(168,85,247,0.3);
-          background: linear-gradient(135deg, rgba(168,85,247,0.2) 0%, rgba(59,130,246,0.2) 100%);
-          color: white;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          transition: all 0.3s ease;
-          width: 40px;
-          height: 40px;
-          box-shadow: ${showWorkspaceDropdown 
-            ? '0 8px 32px rgba(168,85,247,0.4), inset 0 1px 0 rgba(255,255,255,0.1)' 
-            : '0 4px 20px rgba(168,85,247,0.2)'};
-        }
-
-        .workspace-dropdown-button:hover {
-          transform: scale(1.1);
-          background: linear-gradient(135deg, rgba(168,85,247,0.3) 0%, rgba(59,130,246,0.3) 100%);
-        }
-
-        .workspace-dropdown-button:active {
-          transform: scale(0.95);
-        }
-
-        .workspace-dropdown-chevron {
-          transition: all 0.3s ease;
-          ${showWorkspaceDropdown ? 'transform: rotate(180deg); color: #a855f7;' : ''}
-        }
-
-        .workspace-dropdown-menu {
-          position: absolute;
-          top: calc(100% + 12px);
-          right: 0;
-          width: 240px;
-          max-height: 400px;
-          background: linear-gradient(135deg, rgba(13,13,13,0.98) 0%, rgba(26,26,26,0.98) 100%);
-          border: 1px solid rgba(168,85,247,0.3);
-          border-radius: 16px;
-          box-shadow: 0 25px 50px rgba(0,0,0,0.8), 0 12px 40px rgba(168,85,247,0.2);
-          backdrop-filter: blur(24px);
-          padding: 8px;
-          z-index: 1000;
-          animation: slideIn 0.2s ease-out;
-          overflow: hidden;
-        }
-
-        @keyframes slideIn {
-          from {
-            opacity: 0;
-            transform: translateY(-12px) scale(0.95);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0) scale(1);
-          }
-        }
-
-        .workspace-dropdown-header {
-          font-size: 11px;
-          font-weight: 600;
-          text-transform: uppercase;
-          letter-spacing: 0.6px;
-          color: #94a3b8;
-          padding: 12px 16px 8px;
-          margin-bottom: 4px;
-        }
-
-        .workspace-dropdown-item {
-          display: flex;
-          align-items: center;
-          width: 100%;
-          padding: 12px 16px;
-          border-radius: 12px;
-          background: transparent;
-          border: none;
-          color: ${({ isActive }) => isActive ? '#FFFFFF' : '#B3B3B3'};
-          cursor: pointer;
-          transition: all 0.2s ease;
-          position: relative;
-          overflow: hidden;
-          ${({ isActive }) => isActive 
-            ? `background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
-               box-shadow: 0 4px 20px rgba(124,58,237,0.4);`
-            : ''
-          }
-        }
-
-        .workspace-dropdown-item:not(.active):hover {
-          background: linear-gradient(135deg, rgba(168,85,247,0.15) 0%, rgba(59,130,246,0.15) 100%);
-          color: #FFFFFF;
-          transform: scale(1.02);
-        }
-
-        .workspace-dropdown-item:not(.active):active {
-          transform: scale(0.98);
-        }
-
-        .workspace-dropdown-item.active {
-          cursor: default;
-        }
-
-        .workspace-dropdown-item::before {
-          content: '';
-          position: absolute;
-          inset: 0;
-          border-radius: 12px;
-          background: linear-gradient(135deg, rgba(255,255,255,0.08) 0%, transparent 100%);
-          opacity: 0;
-          transition: opacity 0.3s ease;
-        }
-
-        .workspace-dropdown-item:not(.active):hover::before {
-          opacity: 1;
-        }
-
-        .workspace-dropdown-icon {
-          margin-right: 12px;
-          position: relative;
-          z-index: 1;
-          flex-shrink: 0;
-        }
-
-        .workspace-dropdown-text {
-          font-size: 14px;
-          font-weight: 500;
-          position: relative;
-          z-index: 1;
-          flex: 1;
-        }
-
-        .workspace-dropdown-indicator {
-          margin-left: 8px;
-          width: 8px;
-          height: 8px;
-          border-radius: 50%;
-          background: #10b981;
-          box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
-          animation: pulse 2s infinite;
-          flex-shrink: 0;
-        }
-        
-        .connection-status {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          margin-bottom: 16px;
-          padding: 8px 12px;
-          border-radius: 8px;
-          background: ${connected ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)'};
-          border: 1px solid ${connected ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'};
-        }
-        
-        .status-dot {
-          width: 8px;
-          height: 8px;
-          border-radius: 50%;
-          background: ${connected ? '#10b981' : '#ef4444'};
-          animation: ${connected ? 'pulse 2s infinite' : 'none'};
-        }
-        
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; }
-        }
-        
-        .connection-error {
-          background: rgba(239, 68, 68, 0.1);
-          border: 1px solid rgba(239, 68, 68, 0.2);
-          color: #fca5a5;
-          padding: 8px 12px;
-          border-radius: 8px;
-          font-size: 12px;
-          margin-bottom: 16px;
-          display: flex;
-          align-items: center;
-          gap: 8px;
-        }
-        
-        .room-input {
-          background: rgba(15, 23, 42, 0.8);
-          border: 1px solid #334155;
-          border-radius: 8px;
-          padding: 8px 12px;
-          color: #e2e8f0;
-          font-size: 14px;
-          width: 100%;
-          margin-bottom: 12px;
-          transition: border-color 0.2s;
-        }
-        
-        .room-input:focus {
-          outline: none;
-          border-color: #3b82f6;
-          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-        }
-        
-        .username-input {
-          background: rgba(15, 23, 42, 0.8);
-          border: 1px solid #334155;
-          border-radius: 8px;
-          padding: 8px 12px;
-          color: #e2e8f0;
-          font-size: 14px;
-          width: 100%;
-          transition: border-color 0.2s;
-        }
-        
-        .username-input:focus {
-          outline: none;
-          border-color: #3b82f6;
-          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-        }
-        
-        .sidebar-section {
-          padding: 16px 20px;
-          border-bottom: 1px solid #1e293b;
-          position: relative;
-          z-index: 3;
-        }
-        
-        .section-title {
-          font-size: 14px;
-          font-weight: 600;
-          color: #94a3b8;
-          margin-bottom: 12px;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-        }
-        
-        .action-buttons {
-          display: flex;
-          gap: 8px;
-          flex-wrap: wrap;
-        }
-        
-        .btn {
-          background: linear-gradient(135deg, #3b82f6, #1d4ed8);
-          color: white;
-          border: none;
-          padding: 8px 12px;
-          border-radius: 8px;
-          font-size: 13px;
-          font-weight: 500;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          transition: all 0.2s;
-          position: relative;
-          overflow: hidden;
-          z-index: 1;
-        }
-        
-        .btn::before {
-          content: '';
-          position: absolute;
-          top: 0;
-          left: -100%;
-          width: 100%;
-          height: 100%;
-          background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-          transition: left 0.5s;
-        }
-        
-        .btn:hover::before {
-          left: 100%;
-        }
-        
-        .btn:hover {
-          transform: translateY(-1px);
-          box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
-        }
-        
-        .file-list {
-          flex: 1;
-          overflow-y: auto;
-          position: relative;
-          z-index: 2;
-        }
-        
-        .file-item {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          padding: 10px 20px;
-          cursor: pointer;
-          transition: all 0.2s;
-          border-left: 3px solid transparent;
-        }
-        
-        .file-item:hover {
-          background: rgba(59, 130, 246, 0.1);
-        }
-        
-        .file-item.active {
-          background: rgba(59, 130, 246, 0.2);
-          border-left-color: #3b82f6;
-        }
-        
-        .file-icon {
-          width: 12px;
-          height: 12px;
-          border-radius: 2px;
-          flex-shrink: 0;
-        }
-        
-        .file-name {
-          flex: 1;
-          font-size: 14px;
-          font-weight: 500;
-        }
-        
-        .file-actions {
-          display: flex;
-          gap: 4px;
-          opacity: 0;
-          transition: opacity 0.2s;
-        }
-        
-        .file-item:hover .file-actions {
-          opacity: 1;
-        }
-        
-        .icon-btn {
-          background: none;
-          border: none;
-          color: #94a3b8;
-          padding: 4px;
-          border-radius: 4px;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-        
-        .icon-btn:hover {
-          color: #e2e8f0;
-          background: rgba(59, 130, 246, 0.1);
-        }
-        
-        .presence-panel {
-          padding: 16px 20px;
-          border-top: 1px solid #1e293b;
-          position: relative;
-          z-index: 2;
-        }
-        
-        .user-list {
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-        }
-        
-        .user-item {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 6px 8px;
-          border-radius: 6px;
-          background: rgba(15, 23, 42, 0.5);
-        }
-        
-        .user-avatar {
-          width: 24px;
-          height: 24px;
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: white;
-          font-size: 10px;
-          font-weight: 600;
-        }
-        
-        .user-info {
-          flex: 1;
-          font-size: 13px;
-        }
-        
-        .user-cursor {
-          font-size: 11px;
-          color: #94a3b8;
-        }
-        
-        .editor-area {
-          flex: 1;
-          display: flex;
-          flex-direction: column;
-          background: #0f172a;
-        }
-        
-        .editor-header {
-          padding: 12px 20px;
-          background: linear-gradient(90deg, #1e293b, #334155);
-          border-bottom: 1px solid #475569;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-        }
-        
-        .editor-title {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          font-weight: 600;
-        }
-        
-        .language-tag {
-          background: rgba(59, 130, 246, 0.2);
-          color: #93c5fd;
-          padding: 2px 8px;
-          border-radius: 12px;
-          font-size: 11px;
-          font-weight: 500;
-        }
-        
-        .editor-actions {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-        }
-        
-        .toggle-btn {
-          background: none;
-          border: 1px solid #475569;
-          color: #94a3b8;
-          padding: 6px;
-          border-radius: 6px;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-        
-        .toggle-btn:hover,
-        .toggle-btn.active {
-          color: #3b82f6;
-          border-color: #3b82f6;
-          background: rgba(59, 130, 246, 0.1);
-        }
-        
-        .collapse-btn {
-          position: absolute;
-          top: 20px;
-          right: -15px;
-          width: 30px;
-          height: 30px;
-          background: #1e293b;
-          border: 1px solid #334155;
-          border-radius: 50%;
-          color: #94a3b8;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          transition: all 0.2s;
-          z-index: 100;
-        }
-        
-        .collapse-btn:hover {
-          background: #334155;
-          color: #e2e8f0;
-        }
-        
-        .hidden-input {
-          position: absolute;
-          opacity: 0;
-          pointer-events: none;
-        }
-        
-        .file-input-label {
-          background: linear-gradient(135deg, #059669, #047857);
-          color: white;
-          border: none;
-          padding: 8px 12px;
-          border-radius: 8px;
-          font-size: 13px;
-          font-weight: 500;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          transition: all 0.2s;
-          position: relative;
-          z-index: 1;
-        }
-        
-        .file-input-label:hover {
-          transform: translateY(-1px);
-          box-shadow: 0 4px 12px rgba(5, 150, 105, 0.4);
-        }
-        
-        .collaborative-cursor {
-          background-color: rgba(59, 130, 246, 0.3);
-          border-left: 2px solid #3b82f6;
-        }
-        
-        .collaborative-cursor-name {
-          background: #3b82f6;
-          color: white;
-          padding: 2px 6px;
-          border-radius: 4px;
-          font-size: 11px;
-          position: absolute;
-          top: -24px;
-          left: -2px;
-          white-space: nowrap;
-          z-index: 1000;
-        }
-      `}</style>
-
-      {/* Sidebar */}
-      <div className="sidebar">
-        <button 
-          className="collapse-btn"
-          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-        >
-          {sidebarCollapsed ? '→' : '←'}
-        </button>
-
-        {!sidebarCollapsed && (
-          <>
-            <div className="sidebar-header">
-              {/* Workspace Header with Dropdown */}
-              <div className="workspace-header">
-                <div className="workspace-title-section">
-                  <h1 className="workspace-title">Code Editor</h1>
-                  <p className="workspace-subtitle">Collaborative Workspace</p>
-                </div>
-                
-                {/* Workspace Dropdown Button */}
-                <div className="workspace-dropdown" ref={dropdownRef}>
-                  <button
-                    onClick={() => setShowWorkspaceDropdown(!showWorkspaceDropdown)}
-                    className="workspace-dropdown-button"
-                  >
-                    <ChevronDown size={18} className="workspace-dropdown-chevron" />
-                  </button>
-
-                  {/* Dropdown Menu */}
-                  {showWorkspaceDropdown && (
-                    <div className="workspace-dropdown-menu">
-                      <div className="workspace-dropdown-header">
-                        Workspace Features
-                      </div>
-                      {workspaceFeatures.map((feature) => {
-                        const Icon = feature.icon;
-                        return (
-                          <button
-                            key={feature.id}
-                            onClick={() => handleWorkspaceFeatureClick(feature)}
-                            className={`workspace-dropdown-item ${feature.isActive ? 'active' : ''}`}
-                            style={{
-                              background: feature.isActive 
-                                ? 'linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)'
-                                : 'transparent',
-                              color: feature.isActive ? '#FFFFFF' : '#B3B3B3',
-                              boxShadow: feature.isActive ? '0 4px 20px rgba(124,58,237,0.4)' : 'none',
-                              cursor: feature.isActive ? 'default' : 'pointer'
-                            }}
-                          >
-                            <Icon size={18} className="workspace-dropdown-icon" />
-                            <span className="workspace-dropdown-text">{feature.name}</span>
-                            {feature.isActive && (
-                              <div className="workspace-dropdown-indicator"></div>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <input
-                type="text"
-                className="room-input"
-                value={roomId}
-                onChange={(e) => setRoomId(e.target.value)}
-                placeholder="Room ID"
+    <div className="h-screen bg-gray-50 flex overflow-hidden flex-col">
+      {/* Top Navbar */}
+      <nav className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-white" style={{
+        boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+      }}>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold">
+            <span style={{ color: '#A259FF' }}>Colab</span>
+            <span style={{ color: '#000000' }}>X</span>
+          </h1>
+          
+          {/* Workspace Dropdown Button */}
+          <div className="relative" ref={dropdownRef}>
+            <button
+              onClick={() => setShowWorkspaceDropdown(!showWorkspaceDropdown)}
+              className="p-2 rounded-lg transition-all duration-300 hover:scale-110"
+              style={{
+                background: 'linear-gradient(135deg, rgba(168,85,247,0.2) 0%, rgba(59,130,246,0.2) 100%)',
+                border: '1px solid rgba(168,85,247,0.3)'
+              }}
+            >
+              <ChevronDown 
+                size={18} 
+                className={`transition-all duration-300 ${showWorkspaceDropdown ? 'rotate-180 text-purple-600' : 'text-gray-600'}`}
               />
-              
-              <div className="connection-status">
-                <div className="status-dot"></div>
-                {connected ? <Wifi size={16} /> : <WifiOff size={16} />}
-                <span style={{ fontSize: '14px', fontWeight: '500' }}>
-                  {connected ? 'Connected' : 'Offline'}
-                </span>
-              </div>
-              
-              {connectionError && (
-                <div className="connection-error">
-                  <AlertCircle size={14} />
-                  {connectionError}
-                </div>
-              )}
-              
-              <input
-                type="text"
-                className="username-input"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Your username"
-              />
-            </div>
+            </button>
 
-            <div className="sidebar-section">
-              <div className="section-title">Actions</div>
-              <div className="action-buttons">
-                <button onClick={createNewFile} className="btn">
-                  <Plus size={14} />
-                  New File
-                </button>
-                <label className="file-input-label">
-                  <Upload size={14} />
-                  Upload
-                  <input 
-                    type="file" 
-                    onChange={handleFileUpload}
-                    className="hidden-input"
-                  />
-                </label>
-              </div>
-            </div>
-
-            <div className="sidebar-section">
-              <div className="section-title">Files ({files.size})</div>
-            </div>
-
-            <div className="file-list">
-              {Array.from(files.keys()).map((filename) => (
-                <div 
-                  key={filename}
-                  className={`file-item ${filename === activeFile ? 'active' : ''}`}
-                  onClick={() => setActiveFile(filename)}
-                >
-                  <div 
-                    className="file-icon"
-                    style={{ backgroundColor: getFileIcon(filename) }}
-                  ></div>
-                  <div className="file-name">{filename}</div>
-                  <div className="file-actions">
-                    <button
-                      className="icon-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        downloadFile(filename);
-                      }}
-                      title="Download"
-                    >
-                      <Download size={14} />
-                    </button>
-                    <button
-                      className="icon-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        deleteFile(filename);
-                      }}
-                      title="Delete"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+            {/* Dropdown Menu */}
+            {showWorkspaceDropdown && (
+              <div 
+                className="absolute top-full left-0 mt-2 w-56 rounded-2xl overflow-hidden z-50 bg-white border shadow-xl"
+                style={{
+                  border: '1px solid rgba(168,85,247,0.2)',
+                  boxShadow: '0 20px 40px rgba(0,0,0,0.15)'
+                }}
+              >
+                <div className="p-2">
+                  <div className="text-xs font-semibold uppercase tracking-wider text-gray-400 px-3 py-2 mb-1">
+                    Workspace Features
                   </div>
-                </div>
-              ))}
-            </div>
-
-            {showPresence && (
-              <div className="presence-panel">
-                <div className="section-title">
-                  <Users size={14} style={{ display: 'inline', marginRight: '8px' }} />
-                  Active Users ({activeUsers.size + 1})
-                </div>
-                <div className="user-list">
-                  <div className="user-item">
-                    <div className="user-avatar" style={{ backgroundColor: userColorRef.current }}>
-                      {username.charAt(0).toUpperCase()}
-                    </div>
-                    <div className="user-info">
-                      <div>{username} (You)</div>
-                    </div>
-                  </div>
-                  {Array.from(activeUsers.values()).map((user) => (
-                    <div key={user.id} className="user-item">
-                      <div className="user-avatar" style={{ backgroundColor: user.color }}>
-                        {user.name.charAt(0)}
-                      </div>
-                      <div className="user-info">
-                        <div>{user.name}</div>
-                        {user.cursor && user.filename === activeFile && (
-                          <div className="user-cursor">Line {user.cursor.lineNumber}</div>
+                  {workspaceFeatures.map((feature) => {
+                    const Icon = feature.icon;
+                    return (
+                      <button
+                        key={feature.id}
+                        onClick={() => handleWorkspaceFeatureClick(feature)}
+                        className={`w-full flex items-center px-3 py-3 rounded-xl transition-all duration-200 ${
+                          feature.isActive 
+                            ? 'bg-purple-500 text-white cursor-default' 
+                            : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 cursor-pointer'
+                        }`}
+                      >
+                        <Icon size={18} className="mr-3" />
+                        <span className="text-sm font-medium">{feature.name}</span>
+                        {feature.isActive && (
+                          <div className="ml-auto w-2 h-2 rounded-full bg-green-400"></div>
                         )}
-                      </div>
-                    </div>
-                  ))}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
-
-            <div style={{ 
-              padding: '16px 20px', 
-              background: 'rgba(15, 23, 42, 0.8)', 
-              margin: '16px 20px', 
-              borderRadius: '8px', 
-              border: '1px solid #1e293b', 
-              fontSize: '12px', 
-              lineHeight: '1.5', 
-              position: 'relative', 
-              zIndex: 1 
-            }}>
-              <div><strong>Room:</strong> {roomId}</div>
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* Editor Area */}
-      <div className="editor-area">
-        <div className="editor-header">
-          <div className="editor-title">
-            <Code size={18} />
-            <span>{activeFile}</span>
-            <span className="language-tag">{detectLanguage(activeFile)}</span>
-          </div>
-          <div className="editor-actions">
-            <button
-              className={`toggle-btn ${showPresence ? 'active' : ''}`}
-              onClick={() => setShowPresence(!showPresence)}
-              title="Toggle user presence"
-            >
-              <Eye size={16} />
-            </button>
-            <button className="toggle-btn" title="Settings">
-              <Settings size={16} />
-            </button>
-            <button className="toggle-btn" title="Terminal">
-              <Terminal size={16} />
-            </button>
           </div>
         </div>
+        
+        <div className="flex items-center gap-4">
+          <div style={{ fontSize: '14px', color: '#666' }}>
+            Collaborative Workspace Platform
+          </div>
+          
+          {/* Profile Navigation Button */}
+          <button
+            onClick={() => navigate("/profile")}
+            className="w-10 h-10 rounded-full bg-[#A259FF] hover:bg-[#8B46FF] flex items-center justify-center text-white transition-all duration-200 hover:scale-110 hover:shadow-lg hover:shadow-[#A259FF]/25"
+            aria-label="Go to Profile"
+          >
+            <User size={20} />
+          </button>
+        </div>
+      </nav>
 
-        <div style={{ flex: 1 }}>
-          <Editor
-            height="100%"
-            language={detectLanguage(activeFile)}
-            theme="vs-dark"
-            value={files.get(activeFile) || "// Start coding..."}
-            onChange={handleEditorChange}
-            onMount={handleEditorMount}
-            options={{
-              fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
-              fontSize: 14,
-              lineHeight: 1.6,
-              minimap: { enabled: false },
-              scrollBeyondLastLine: false,
-              smoothScrolling: true,
-              cursorBlinking: 'smooth',
-              renderLineHighlight: 'gutter',
-              selectOnLineNumbers: true,
-              automaticLayout: true,
-              padding: { top: 16, bottom: 16 }
-            }}
-          />
+      {/* Main Content Area */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* CSS Styles for collaborative cursors */}
+        <style jsx global>{`
+          .collaborative-cursor {
+            background-color: transparent !important;
+            border-left: 2px solid;
+            position: relative;
+          }
+
+          .collaborative-cursor-before {
+            position: relative;
+          }
+
+          .collaborative-cursor-label {
+            position: absolute;
+            top: -20px;
+            left: -5px;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: 500;
+            color: white;
+            white-space: nowrap;
+            z-index: 1000;
+          }
+
+          .collaborative-cursor-label::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 6px;
+            width: 0;
+            height: 0;
+            border-left: 4px solid transparent;
+            border-right: 4px solid transparent;
+            border-top: 4px solid;
+            border-top-color: inherit;
+          }
+        `}</style>
+
+        {/* Sidebar */}
+        <div className={`bg-white border-r border-gray-200 transition-all duration-300 ${
+          sidebarCollapsed ? 'w-12' : 'w-80'
+        }`}>
+          {/* Sidebar Header */}
+          <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+            {!sidebarCollapsed && (
+              <div>
+                <h1 className="text-lg font-semibold text-gray-900">Workspace</h1>
+                <p className="text-sm text-gray-500">Room: {roomId}</p>
+              </div>
+            )}
+            <button
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <Code size={16} />
+            </button>
+          </div>
+
+          {!sidebarCollapsed && (
+            <>
+              {/* Connection Status */}
+              <div className="p-4 border-b border-gray-200">
+                <div className="flex items-center gap-2 mb-3">
+                  {connected ? (
+                    <div className="flex items-center gap-2 text-green-600">
+                      <Wifi size={16} />
+                      <span className="text-sm font-medium">Connected</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 text-red-600">
+                      <WifiOff size={16} />
+                      <span className="text-sm font-medium">Disconnected</span>
+                    </div>
+                  )}
+                </div>
+                
+                {connectionError && (
+                  <div className="flex items-center gap-2 text-amber-600 bg-amber-50 p-2 rounded-lg mb-3">
+                    <AlertCircle size={14} />
+                    <span className="text-xs">{connectionError}</span>
+                  </div>
+                )}
+
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    className="text-sm border border-gray-300 rounded px-2 py-1 flex-1"
+                    placeholder="Your name"
+                  />
+                  <input
+                    type="text"
+                    value={roomId}
+                    onChange={(e) => setRoomId(e.target.value)}
+                    className="text-sm border border-gray-300 rounded px-2 py-1 flex-1"
+                    placeholder="Room ID"
+                  />
+                </div>
+              </div>
+
+              {/* Files List */}
+              <div className="p-4 border-b border-gray-200">
+                <div className="flex justify-between items-center mb-2">
+                  <h2 className="text-sm font-semibold text-gray-700">Files</h2>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={createNewFile}
+                      className="p-1 hover:bg-gray-100 rounded"
+                      title="New File"
+                    >
+                      <Plus size={16} />
+                    </button>
+                    <label className="p-1 hover:bg-gray-100 rounded cursor-pointer" title="Upload File">
+                      <Upload size={16} />
+                      <input
+                        type="file"
+                        className="hidden"
+                        onChange={handleFileUpload}
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <ul className="space-y-1">
+                  {Array.from(files.keys()).map((filename) => (
+                    <li
+                      key={filename}
+                      className={`flex items-center justify-between p-2 rounded cursor-pointer ${
+                        filename === activeFile
+                          ? "bg-blue-50 text-blue-700"
+                          : "hover:bg-gray-100"
+                      }`}
+                      onClick={() => setActiveFile(filename)}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="w-3 h-3 rounded-full"
+                          style={{ backgroundColor: getFileIcon(filename) }}
+                        />
+                        <span className="text-sm font-medium">{filename}</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            downloadFile(filename);
+                          }}
+                          title="Download"
+                          className="p-1 hover:bg-gray-200 rounded"
+                        >
+                          <Download size={14} />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteFile(filename);
+                          }}
+                          title="Delete"
+                          className="p-1 hover:bg-gray-200 rounded text-red-600"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* Active Users */}
+              {showPresence && (
+                <div className="p-4">
+                  <h2 className="text-sm font-semibold text-gray-700 mb-2">
+                    Active Users
+                  </h2>
+                  <ul className="space-y-1">
+                    {Array.from(activeUsers.values()).map((user) => (
+                      <li key={user.id} className="flex items-center gap-2">
+                        <span
+                          className="w-3 h-3 rounded-full"
+                          style={{ backgroundColor: user.color }}
+                        />
+                        <span className="text-sm">{user.name}</span>
+                        {user.filename && (
+                          <span className="text-xs text-gray-500">
+                            ({user.filename} - line {user.cursor?.lineNumber || "?"})
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Main Editor Area */}
+        <div className="flex-1 flex flex-col">
+          <div className="flex-1">
+            <Editor
+              height="100%"
+              language={detectLanguage(activeFile)}
+              value={files.get(activeFile)}
+              onChange={handleEditorChange}
+              onMount={handleEditorMount}
+              theme="vs-dark"
+            />
+          </div>
         </div>
       </div>
     </div>

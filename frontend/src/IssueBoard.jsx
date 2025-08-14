@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState } from "react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
-import { Plus, ChevronDown, MessageCircle, Code, FileText, CheckSquare, GitBranch, PenTool } from "lucide-react";
-import { useNavigate } from 'react-router-dom';
+import { Plus } from "lucide-react";
 
 const theme = {
   background: "linear-gradient(135deg, #0F0F23 0%, #1A0B3D 100%)",
@@ -15,41 +14,15 @@ const theme = {
 };
 
 export default function IssueBoard() {
-  const navigate = useNavigate();
   const [columns, setColumns] = useState({
     issues: { name: "Issues", items: [] },
     inProgress: { name: "Under Work", items: [] },
     completed: { name: "Completed", items: [] }
   });
+
   const [showForm, setShowForm] = useState(false);
   const [newIssue, setNewIssue] = useState({ title: "", description: "", dueDate: "", status: "Low", assignee: "" });
   const [expandedItem, setExpandedItem] = useState(null);
-  const [showWorkspaceDropdown, setShowWorkspaceDropdown] = useState(false);
-  const dropdownRef = useRef(null);
-
-  const workspaceFeatures = [
-    { id: 'chatroom', name: 'Chat Room', icon: MessageCircle, isActive: false, route: '/chat' },
-    { id: 'code-editor', name: 'Code Editor', icon: Code, isActive: false, route: '/code' },
-    { id: 'notes', name: 'Notes', icon: FileText, isActive: false, route: '/notes' },
-    { id: 'issue-board', name: 'Issue Board', icon: CheckSquare, isActive: true, route: '/issues' },
-    { id: 'git-commits', name: 'Git Commits', icon: GitBranch, isActive: false, route: '/git' },
-    { id: 'whiteboard', name: 'Whiteboard', icon: PenTool, isActive: false, route: '/whiteboard' }
-  ];
-
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setShowWorkspaceDropdown(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const handleWorkspaceFeatureClick = (feature) => {
-    if (!feature.isActive) navigate(feature.route);
-    setShowWorkspaceDropdown(false);
-  };
 
   const onDragEnd = (result) => {
     if (!result.destination) return;
@@ -83,7 +56,8 @@ export default function IssueBoard() {
 
   const handleAddIssue = () => {
     if (!newIssue.title.trim()) return;
-    setColumns(prev => ({
+
+    setColumns((prev) => ({
       ...prev,
       issues: {
         ...prev.issues,
@@ -93,132 +67,50 @@ export default function IssueBoard() {
         ]
       }
     }));
+
     setNewIssue({ title: "", description: "", dueDate: "", status: "Low", assignee: "" });
     setShowForm(false);
   };
 
   return (
-    <div style={{
-      background: theme.background,
-      color: theme.text,
-      minHeight: "100vh",
-      fontFamily: "system-ui, -apple-system, sans-serif"
-    }}>
-      {/* Top Navbar with dropdown next to brand */}
-      <nav style={{
-        background: 'linear-gradient(90deg, rgba(26,26,26,0.95) 0%, rgba(20,20,20,0.95) 100%)',
-        borderBottom: '1px solid rgba(255,255,255,0.1)',
-        padding: '16px 32px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        position: 'sticky',
-        top: 0,
-        zIndex: 100,
-        boxShadow: '0 4px 20px rgba(0,0,0,0.2)'
-      }}>
-        {/* Brand + Dropdown together */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ fontSize: '24px', fontWeight: 'bold', cursor: 'pointer' }} onClick={() => navigate('/')}>
-            <span style={{ color: '#a855f7' }}>Colab</span>
-            <span style={{ color: '#fff' }}>X</span>
-          </div>
-          <div ref={dropdownRef}>
-            <button
-              onClick={() => setShowWorkspaceDropdown(!showWorkspaceDropdown)}
-              style={{
-                padding: '8px 10px',
-                borderRadius: '8px',
-                border: '1px solid rgba(168,85,247,0.3)',
-                background: 'linear-gradient(135deg, rgba(168,85,247,0.2) 0%, rgba(59,130,246,0.2) 100%)',
-                color: '#fff',
-                cursor: 'pointer'
-              }}
-            >
-              <ChevronDown size={18} />
-            </button>
-            {showWorkspaceDropdown && (
-              <div style={{
-                position: 'absolute',
-                marginTop: '8px',
-                background: 'linear-gradient(135deg, rgba(13,13,13,0.98) 0%, rgba(26,26,26,0.98) 100%)',
-                border: '1px solid rgba(168,85,247,0.3)',
-                borderRadius: '12px',
-                padding: '8px',
-                width: '220px',
-                boxShadow: '0 8px 20px rgba(0,0,0,0.5)',
-                zIndex: 200
-              }}>
-                <div style={{ fontSize: '11px', fontWeight: 600, padding: '6px 10px', color: '#94a3b8' }}>Workspace Features</div>
-                {workspaceFeatures.map(feature => {
-                  const Icon = feature.icon;
-                  return (
-                    <button
-                      key={feature.id}
-                      onClick={() => handleWorkspaceFeatureClick(feature)}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        width: '100%',
-                        padding: '8px',
-                        borderRadius: '8px',
-                        background: feature.isActive ? 'linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)' : 'transparent',
-                        color: feature.isActive ? '#fff' : '#B3B3B3',
-                        border: 'none',
-                        textAlign: 'left',
-                        cursor: feature.isActive ? 'default' : 'pointer'
-                      }}
-                    >
-                      <Icon size={16} style={{ marginRight: '10px' }} />
-                      {feature.name}
-                      {feature.isActive && <div style={{
-                        width: '6px',
-                        height: '6px',
-                        borderRadius: '50%',
-                        background: '#10b981',
-                        marginLeft: 'auto'
-                      }} />}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-        
-        <div style={{ fontSize: '14px', color: '#B3B3B3' }}>
-          Collaborative Workspace Platform
-        </div>
-      </nav>
+    <div
+      style={{
+        background: theme.background,
+        color: theme.text,
+        minHeight: "100vh",
+        padding: "24px",
+        fontFamily: "system-ui, -apple-system, sans-serif"
+      }}
+    >
 
-      {/* Title */}
-      <div style={{ textAlign: 'center', margin: '32px 0' }}>
-        <h1 style={{
-          fontSize: '2.5rem',
-          fontWeight: '700',
-          margin: 0,
-          filter: 'drop-shadow(0 0 10px rgba(162, 89, 255, 0.3))'
-        }}>
-          <span style={{ color: '#fff' }}>Issue</span>{" "}
-          <span style={{
-            background: 'linear-gradient(135deg, #A259FF 0%, #7C3AED 100%)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent'
-          }}>
-            Management
-          </span>
-        </h1>
-        <div style={{
-          width: '60px',
-          height: '3px',
+      <div style={{ textAlign: "center", marginBottom: "32px" }}>
+        <h1 style={{ 
+  fontSize: "2.5rem",
+  fontWeight: "700",
+  margin: "0",
+  filter: "drop-shadow(0 0 10px rgba(162, 89, 255, 0.3))"
+}}>
+  <span style={{ color: "#FFFFFF" }}>Issue</span>{" "}
+  <span style={{
+    background: "linear-gradient(135deg, #A259FF 0%, #7C3AED 100%)",
+    WebkitBackgroundClip: "text",
+    WebkitTextFillColor: "transparent"
+  }}>
+    Management
+  </span>
+</h1>
+
+        <div style={{ 
+          width: "60px", 
+          height: "3px", 
           background: theme.primary,
-          margin: '16px auto',
-          borderRadius: '2px',
+          margin: "16px auto",
+          borderRadius: "2px",
           boxShadow: theme.glow
         }} />
       </div>
 
-      {/* Add Issue Form */}
+      {/* Add Issue Form - Moved to top */}
       {showForm && (
         <div style={{
           maxWidth: "400px",
@@ -227,74 +119,223 @@ export default function IssueBoard() {
           backdropFilter: "blur(10px)",
           border: "1px solid rgba(162, 89, 255, 0.2)",
           padding: "20px",
-          borderRadius: "16px"
+          borderRadius: "16px",
+          boxShadow: "0 8px 32px rgba(0, 0, 0, 0.3)"
         }}>
-          <h3 style={{ marginBottom: "12px" }}>Add New Issue</h3>
-          <input style={inputStyle} placeholder="Issue Title" value={newIssue.title} onChange={(e) => setNewIssue({ ...newIssue, title: e.target.value })} />
-          <textarea style={{ ...inputStyle, height: "80px" }} placeholder="Description" value={newIssue.description} onChange={(e) => setNewIssue({ ...newIssue, description: e.target.value })} />
-          <input style={inputStyle} type="date" value={newIssue.dueDate} onChange={(e) => setNewIssue({ ...newIssue, dueDate: e.target.value })} />
-          <select style={selectStyle} value={newIssue.status} onChange={(e) => setNewIssue({ ...newIssue, status: e.target.value })}>
-            <option value="Low">🟢 Low Priority</option>
-            <option value="Medium">🟡 Medium Priority</option>
-            <option value="High">🔴 High Priority</option>
-            <option value="Critical">⚡ Critical</option>
+          <h3 style={{ margin: "0 0 16px 0", color: theme.text, fontSize: "1.2rem" }}>Add New Issue</h3>
+          <input
+            style={inputStyle}
+            placeholder="Issue Title"
+            value={newIssue.title}
+            onChange={(e) => setNewIssue({ ...newIssue, title: e.target.value })}
+          />
+          <textarea
+            style={{ ...inputStyle, height: "80px", resize: "none" }}
+            placeholder="Description"
+            value={newIssue.description}
+            onChange={(e) => setNewIssue({ ...newIssue, description: e.target.value })}
+          />
+          <input
+            style={inputStyle}
+            type="date"
+            placeholder="Due Date"
+            value={newIssue.dueDate}
+            onChange={(e) => setNewIssue({ ...newIssue, dueDate: e.target.value })}
+          />
+          <select
+            style={selectStyle}
+            value={newIssue.status}
+            onChange={(e) => setNewIssue({ ...newIssue, status: e.target.value })}
+          >
+            <option style={{background: "#1A1A1A", color: "#FFFFFF"}} value="Low">🟢 Low Priority</option>
+            <option style={{background: "#1A1A1A", color: "#FFFFFF"}} value="Medium">🟡 Medium Priority</option>
+            <option style={{background: "#1A1A1A", color: "#FFFFFF"}} value="High">🔴 High Priority</option>
+            <option style={{background: "#1A1A1A", color: "#FFFFFF"}} value="Critical">⚡ Critical</option>
           </select>
-          <input style={inputStyle} placeholder="Assigned to" value={newIssue.assignee} onChange={(e) => setNewIssue({ ...newIssue, assignee: e.target.value })} />
+          <input
+            style={inputStyle}
+            placeholder="Assigned to"
+            value={newIssue.assignee}
+            onChange={(e) => setNewIssue({ ...newIssue, assignee: e.target.value })}
+          />
           <div style={{ display: "flex", gap: "12px" }}>
-            <button style={{ ...buttonStyle, background: "rgba(255,255,255,0.1)" }} onClick={() => setShowForm(false)}>Cancel</button>
-            <button style={buttonStyle} onClick={handleAddIssue}>Add Issue</button>
+            <button 
+              style={{ ...buttonStyle, background: "rgba(255, 255, 255, 0.1)" }}
+              onClick={() => setShowForm(false)}
+            >
+              Cancel
+            </button>
+            <button 
+              style={buttonStyle} 
+              onClick={handleAddIssue}
+            >
+              Add Issue
+            </button>
           </div>
         </div>
       )}
 
-      {/* Drag & Drop Board */}
       <DragDropContext onDragEnd={onDragEnd}>
-        <div style={{ display: "flex", gap: "20px", justifyContent: "center", flexWrap: "wrap", paddingBottom: "40px" }}>
+        <div style={{ display: "flex", gap: "20px", justifyContent: "center", flexWrap: "wrap" }}>
           {Object.entries(columns).map(([id, column]) => (
             <Droppable droppableId={id} key={id}>
-              {(provided) => (
-                <div ref={provided.innerRef} {...provided.droppableProps} style={{
-                  background: theme.card,
-                  backdropFilter: "blur(10px)",
-                  border: `1px solid ${theme.cardBorder}`,
-                  padding: "20px",
-                  width: 320,
-                  minHeight: 500,
-                  borderRadius: "16px"
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
-                    <h3>{column.name}</h3>
+              {(provided, snapshot) => (
+                <div
+                  {...provided.droppableProps}
+                  ref={provided.innerRef}
+                  style={{
+                    background: theme.card,
+                    backdropFilter: "blur(10px)",
+                    border: `1px solid ${theme.cardBorder}`,
+                    padding: "20px",
+                    width: 320,
+                    minHeight: 500,
+                    borderRadius: "16px",
+                    display: "flex",
+                    flexDirection: "column",
+                    boxShadow: "0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1)"
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                    <h3 style={{ 
+                      color: theme.text,
+                      fontSize: "1.2rem",
+                      fontWeight: "600",
+                      margin: "0"
+                    }}>
+                      {column.name}
+                    </h3>
                     {id === "issues" && (
                       <button
                         onClick={() => setShowForm(!showForm)}
                         style={{
                           background: theme.primary,
-                          border: 'none',
-                          borderRadius: '50%',
-                          padding: '8px',
-                          cursor: 'pointer'
+                          border: "none",
+                          borderRadius: "50%",
+                          padding: "8px",
+                          cursor: "pointer",
+                          boxShadow: theme.glow,
+                          transition: "all 0.2s ease",
+                          transform: showForm ? "rotate(45deg)" : "rotate(0deg)"
                         }}
+                        onMouseEnter={e => e.target.style.transform = showForm ? "rotate(45deg) scale(1.1)" : "rotate(0deg) scale(1.1)"}
+                        onMouseLeave={e => e.target.style.transform = showForm ? "rotate(45deg)" : "rotate(0deg)"}
                       >
-                        <Plus size={18} />
+                        <Plus size={18} color={theme.text} />
                       </button>
                     )}
                   </div>
-                  {column.items.map((item, index) => (
-                    <Draggable key={item.id} draggableId={item.id} index={index}>
-                      {(provided, snapshot) => (
-                        <div ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps}
-                          onClick={() => setExpandedItem(expandedItem === item.id ? null : item.id)}
-                          style={{
-                            background: snapshot.isDragging ? 'linear-gradient(135deg, #A259FF 0%, #7C3AED 100%)' : 'rgba(255, 255, 255, 0.08)',
-                            marginBottom: '12px', padding: '16px', borderRadius: '12px'
-                          }}>
-                          <strong>{item.title}</strong>
-                          {expandedItem === item.id && <p>{item.description}</p>}
-                        </div>
-                      )}
-                    </Draggable>
-                  ))}
-                  {provided.placeholder}
+
+                  <div style={{ flexGrow: 1 }}>
+                    {column.items.map((item, index) => (
+                      <Draggable key={item.id} draggableId={item.id} index={index}>
+                        {(provided, snapshot) => (
+                          <div
+                            ref={provided.innerRef}
+                            {...provided.draggableProps}
+                            {...provided.dragHandleProps}
+                            onClick={() => setExpandedItem(expandedItem === item.id ? null : item.id)}
+                            style={{
+                              background: snapshot.isDragging ? 
+                                "linear-gradient(135deg, #A259FF 0%, #7C3AED 100%)" :
+                                "rgba(255, 255, 255, 0.08)",
+                              border: "1px solid rgba(255, 255, 255, 0.1)",
+                              color: theme.text,
+                              padding: "16px",
+                              marginBottom: snapshot.isDragging ? "0" : "12px",
+                              borderRadius: "12px",
+                              boxShadow: snapshot.isDragging ? 
+                                "0 10px 40px rgba(162, 89, 255, 0.4)" :
+                                "0 4px 16px rgba(0, 0, 0, 0.2)",
+                              cursor: snapshot.isDragging ? "grabbing" : "pointer",
+                              transform: provided.draggableProps.style?.transform || "none",
+                              transition: expandedItem === item.id ? "none" : "all 0.2s ease"
+                            }}
+                          >
+                            <strong style={{ fontSize: "14px", display: "block", marginBottom: "8px" }}>
+                              {item.title}
+                            </strong>
+                            
+                            {/* Always visible status and assignee */}
+                            <div style={{ display: "flex", gap: "8px", marginBottom: "8px", flexWrap: "wrap" }}>
+                              <div style={{ 
+                                fontSize: "11px",
+                                color: item.status === "Critical" ? "#FF4444" : 
+                                        item.status === "High" ? "#FF8800" :
+                                        item.status === "Medium" ? "#FFAA00" : "#44FF44",
+                                background: "rgba(255, 255, 255, 0.1)",
+                                padding: "2px 6px",
+                                borderRadius: "4px",
+                                display: "inline-block"
+                              }}>
+                                {item.status === "Critical" ? "⚡" : 
+                                  item.status === "High" ? "🔴" :
+                                  item.status === "Medium" ? "🟡" : "🟢"} {item.status}
+                              </div>
+                              {item.assignee && (
+                                <div style={{ 
+                                  fontSize: "11px",
+                                  color: "#A259FF",
+                                  background: "rgba(162, 89, 255, 0.1)",
+                                  padding: "2px 6px",
+                                  borderRadius: "4px",
+                                  display: "inline-block"
+                                }}>
+                                  👤 {item.assignee}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Expandable description */}
+                            {item.description && expandedItem === item.id && (
+                              <p style={{ 
+                                fontSize: "12px", 
+                                color: theme.mutedText,
+                                margin: "0 0 8px 0",
+                                lineHeight: "1.4",
+                                background: "rgba(255, 255, 255, 0.05)",
+                                padding: "8px",
+                                borderRadius: "6px",
+                                border: "1px solid rgba(255, 255, 255, 0.1)",
+                                wordWrap: "break-word",
+                                overflowWrap: "break-word",
+                                maxHeight: "120px",
+                                overflow: "auto"
+                              }}>
+                                {item.description}
+                              </p>
+                            )}
+
+                            {/* Description indicator */}
+                            {item.description && expandedItem !== item.id && (
+                              <p style={{ 
+                                fontSize: "11px", 
+                                color: theme.mutedText,
+                                margin: "0 0 8px 0",
+                                fontStyle: "italic"
+                              }}>
+                                📄 Click to view description
+                              </p>
+                            )}
+
+                            {item.dueDate && (
+                              <div style={{ 
+                                fontSize: "11px",
+                                color: "#A259FF",
+                                background: "rgba(162, 89, 255, 0.1)",
+                                padding: "4px 8px",
+                                borderRadius: "6px",
+                                display: "inline-block"
+                              }}>
+                                📅 Due: {new Date(item.dueDate).toLocaleDateString()}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </Draggable>
+                    ))}
+                    {provided.placeholder}
+                  </div>
                 </div>
               )}
             </Droppable>
@@ -313,10 +354,23 @@ const inputStyle = {
   border: "1px solid rgba(255, 255, 255, 0.1)",
   background: "rgba(255, 255, 255, 0.05)",
   color: "#FFFFFF",
-  outline: "none"
+  fontSize: "14px",
+  outline: "none",
+  backdropFilter: "blur(10px)",
+  transition: "all 0.2s ease"
 };
 
-const selectStyle = { ...inputStyle, cursor: "pointer" };
+const selectStyle = {
+  ...inputStyle,
+  cursor: "pointer",
+  WebkitAppearance: "none",
+  MozAppearance: "none",
+  appearance: "none",
+  backgroundImage: "url('data:image/svg+xml;utf8,<svg fill=\"%23FFFFFF\" height=\"24\" viewBox=\"0 0 24 24\" width=\"24\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M7 10l5 5 5-5z\"/></svg>')",
+  backgroundRepeat: "no-repeat",
+  backgroundPosition: "right 12px center",
+  backgroundSize: "16px"
+};
 
 const buttonStyle = {
   background: "linear-gradient(135deg, #A259FF 0%, #7C3AED 100%)",
@@ -326,5 +380,8 @@ const buttonStyle = {
   borderRadius: "8px",
   cursor: "pointer",
   width: "100%",
-  fontWeight: "600"
+  fontWeight: "600",
+  fontSize: "14px",
+  boxShadow: "0 4px 16px rgba(162, 89, 255, 0.3)",
+  transition: "all 0.2s ease"
 };

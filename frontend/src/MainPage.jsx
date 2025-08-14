@@ -1,7 +1,8 @@
 import React from "react";
 import { motion } from "framer-motion";
+import { User } from "lucide-react"; // Import User icon for header only
 import project from "./assets/project.png";
-import profileImg from "./assets/profile.png";
+import profileImg from "./assets/profile.png"; // Keep this for the profile card
 import devsImg from "./assets/devs.png";
 import commuImg from "./assets/commu.png";
 import "./MainPage.css";
@@ -42,11 +43,15 @@ const MainPage = () => {
           <button className="text-gray-400 hover:text-white">
             <i className="fas fa-bell"></i>
           </button>
-          <img
-            src={profileImg}
-            alt="User Avatar"
-            className="w-10 h-10 rounded-full"
-          />
+          
+          {/* Human-like clickable icon for profile navigation */}
+          <button
+            onClick={() => navigate("/profile")}
+            className="w-10 h-10 rounded-full bg-[#A259FF] hover:bg-[#8B46FF] flex items-center justify-center text-white transition-all duration-200 hover:scale-110 hover:shadow-lg hover:shadow-[#A259FF]/25"
+            aria-label="Go to Profile"
+          >
+            <User size={20} />
+          </button>
         </div>
       </header>
 
@@ -85,7 +90,7 @@ const MainPage = () => {
           </p>
         </motion.div>
 
-        {/* Profile - Top Right */}
+        {/* Profile - Top Right - Keep original image */}
         <motion.div
           className="card-glow bg-[#1A1A1A] p-6 rounded-2xl shadow text-center cursor-pointer"
           variants={cornerVariants.topRight}

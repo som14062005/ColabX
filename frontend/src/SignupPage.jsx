@@ -19,6 +19,15 @@ function SignupPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [errors, setErrors] = useState({});
+  const [skillInput, setSkillInput] = useState("");
+  const [suggestions, setSuggestions] = useState([]);
+
+  // Predefined skill list
+  const allSkills = [
+    "JavaScript", "React", "Node.js", "Express", "Python", "Java", "C++",
+    "HTML", "CSS", "Tailwind CSS", "MongoDB", "PostgreSQL", "MySQL", 
+    "Git", "GitHub", "Docker", "Kubernetes", "AWS", "Azure", "Firebase"
+  ];
 
   // Load Unicorn Studio script once
   useEffect(() => {
@@ -50,6 +59,8 @@ function SignupPage() {
       if (f.skills.includes(skill)) return f;
       return { ...f, skills: [...f.skills, skill] };
     });
+    setSkillInput("");
+    setSuggestions([]);
   };
 
   const removeSkill = (skill) => {
@@ -97,6 +108,23 @@ function SignupPage() {
     } catch (error) {
       console.error("Signup error:", error);
       alert("Something went wrong. Try again.");
+    }
+  };
+
+  // Handle skill input & suggestions
+  const handleSkillInput = (e) => {
+    const value = e.target.value;
+    setSkillInput(value);
+
+    if (value.trim()) {
+      const filtered = allSkills.filter(
+        (skill) =>
+          skill.toLowerCase().includes(value.toLowerCase()) &&
+          !form.skills.includes(skill)
+      );
+      setSuggestions(filtered);
+    } else {
+      setSuggestions([]);
     }
   };
 
@@ -237,7 +265,7 @@ function SignupPage() {
             </div>
 
             {/* Skills */}
-            <div>
+            <div className="relative">
               <label className="text-sm text-gray-300">
                 Skills (optional)
               </label>
@@ -260,16 +288,32 @@ function SignupPage() {
                 <input
                   type="text"
                   placeholder="Add skill"
+                  value={skillInput}
+                  onChange={handleSkillInput}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
-                      addSkill(e.target.value.trim());
-                      e.target.value = "";
+                      addSkill(skillInput.trim());
                     }
                   }}
                   className="bg-[#0F0F0F] border border-gray-700 text-white p-1 px-2 rounded"
                 />
               </div>
+
+              {/* Suggestions Dropdown */}
+              {suggestions.length > 0 && (
+                <div className="absolute bg-[#1E1E1E] border border-gray-700 rounded mt-1 w-48 shadow-lg z-20">
+                  {suggestions.map((s) => (
+                    <div
+                      key={s}
+                      className="px-3 py-1 text-white hover:bg-purple-600 cursor-pointer"
+                      onClick={() => addSkill(s)}
+                    >
+                      {s}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* GitHub link */}

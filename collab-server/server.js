@@ -1,496 +1,964 @@
-const WebSocket = require('ws');
-const express = require('express');
-const http = require('http');
-const cors = require('cors');
+import React, { useEffect, useRef, useState, useCallback } from "react";
+import Editor from "@monaco-editor/react";
+import { Users, Plus, Upload, Trash2, Code, Wifi, WifiOff, Eye, Download, Settings, Terminal, AlertCircle } from "lucide-react";
 
-const app = express();
-const server = http.createServer(app);
-
-// Enable CORS for all routes
-app.use(cors());
-app.use(express.json());
-
-// Store rooms data: roomId -> { users: Map, files: Map }
-const rooms = new Map();
-
-// Create WebSocket server
-const wss = new WebSocket.Server({ 
-  server,
-  path: '/collab',
-  clientTracking: true
-});
-
-console.log('🚀 Starting Collaborative Code Server...');
-
-// Track connection count
-let connectionCount = 0;
-
-wss.on('connection', (ws, req) => {
-  connectionCount++;
-  const connectionId = `conn-${connectionCount}`;
-  const clientIP = req.socket.remoteAddress;
+export default function CollabWorkspace() {
+  const [files, setFiles] = useState(new Map([
+    ["index.js", "// Welcome to the collaborative workspace\nconsole.log('Hello, collaborative world!');\n"],
+    ["README.md", "# Collaborative Workspace\n\nStart coding together in real-time!\n"],
+    ["styles.css", "/* Add your styles here */\nbody {\n  font-family: 'Inter', sans-serif;\n}\n"]
+  ]));
   
-  console.log(`👤 New connection ${connectionId} from ${clientIP} - Active: ${wss.clients.size}`);
-  
-  let currentRoom = null;
-  let userId = null;
-  let userInfo = null;
-  let heartbeatInterval;
-  let isAlive = true;
+  const [activeFile, setActiveFile] = useState("index.js");
+  const [connected, setConnected] = useState(false);
+  const [connectionError, setConnectionError] = useState(null);
+  const [activeUsers, setActiveUsers] = useState(new Map());
+  const [username, setUsername] = useState(() => "User-" + Math.floor(Math.random() * 1000));
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [showPresence, setShowPresence] = useState(true);
+  const [roomId, setRoomId] = useState("demo-room");
 
-  // Heartbeat to detect dead connections
-  ws.isAlive = true;
-  ws.on('pong', () => {
-    ws.isAlive = true;
-    if (userInfo) {
-      userInfo.lastSeen = Date.now();
-    }
-  });
+  // WebSocket and collaboration refs
+  const wsRef = useRef(null);
+  const editorRef = useRef(null);
+  const isLocalChangeRef = useRef(false);
+  const userColorRef = useRef(generateRandomColor());
+  const reconnectTimeoutRef = useRef(null);
+  const isUnmountingRef = useRef(false);
+  const operationQueueRef = useRef([]);
+  const isProcessingRef = useRef(false);
+  const pendingFileSwitch = useRef(null);
+  const lastSyncedContent = useRef(new Map());
 
-  // Start heartbeat immediately
-  heartbeatInterval = setInterval(() => {
-    if (!ws.isAlive) {
-      console.log(`💀 Connection ${connectionId} appears dead, terminating...`);
-      ws.terminate();
+  // Generate a random color for the user
+  function generateRandomColor() {
+    const colors = [
+      '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
+      '#06b6d4', '#84cc16', '#f97316', '#ec4899', '#6366f1'
+    ];
+    return colors[Math.floor(Math.random() * colors.length)];
+  }
+
+  // Queue operations to prevent race conditions
+  const processOperationQueue = useCallback(() => {
+    if (isProcessingRef.current || operationQueueRef.current.length === 0) {
       return;
     }
-    ws.isAlive = false;
-    ws.ping();
-  }, 10000); // Check every 10 seconds
 
-  // Handle incoming messages
-  ws.on('message', (data) => {
+    isProcessingRef.current = true;
+    const operation = operationQueueRef.current.shift();
+    
     try {
-      const message = JSON.parse(data.toString());
-      console.log('📨 Received message:', { type: message.type, user: message.userId || 'unknown' });
-      
-      switch (message.type) {
-        case 'join':
-          handleUserJoin(ws, message);
-          break;
-          
-        case 'file-operation':
-          handleFileOperation(message);
-          break;
-          
-        case 'cursor-position':
-          broadcastToRoom(message, ws);
-          break;
-          
-        case 'file-created':
-          handleFileCreated(message);
-          break;
-          
-        case 'file-deleted':
-          handleFileDeleted(message);
-          break;
-          
-        case 'leave':
-          handleUserLeave(message);
-          break;
-          
-        default:
-          console.warn('⚠️ Unknown message type:', message.type);
-      }
+      operation();
     } catch (error) {
-      console.error('❌ Error processing message:', error);
-      ws.send(JSON.stringify({
-        type: 'error',
-        error: 'Failed to process message'
-      }));
+      console.error('Error processing queued operation:', error);
+    } finally {
+      isProcessingRef.current = false;
+      // Process next operation after a short delay
+      setTimeout(processOperationQueue, 10);
     }
-  });
+  }, []);
 
-  // Handle user leaving
-  function handleUserLeave(message) {
-    console.log(`👋 User ${message.userId} explicitly leaving room ${currentRoom}`);
-    if (currentRoom && message.userId) {
-      const room = rooms.get(currentRoom);
-      if (room) {
-        room.users.delete(message.userId);
-        broadcastToRoom({
-          type: 'user-left',
-          userId: message.userId
-        }, ws);
-      }
+  // Add operation to queue
+  const queueOperation = useCallback((operation) => {
+    operationQueueRef.current.push(operation);
+    processOperationQueue();
+  }, [processOperationQueue]);
+
+  // WebSocket connection management with proper cleanup
+  const connectWebSocket = useCallback(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN || wsRef.current?.readyState === WebSocket.CONNECTING) {
+      console.log('🔄 WebSocket already connected or connecting, skipping...');
+      return;
     }
-  }
 
-  // Handle user joining a room
-  function handleUserJoin(ws, message) {
+    if (isUnmountingRef.current) {
+      console.log('🛑 Component unmounting, aborting connection');
+      return;
+    }
+
+    if (wsRef.current) {
+      console.log('🧹 Cleaning up existing connection');
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+
     try {
-      currentRoom = message.roomId;
-      userId = message.user.id;
-      userInfo = { ...message.user, ws, lastSeen: Date.now() };
-      
-      console.log(`👋 User ${userId} joining room ${currentRoom}`);
-      
-      // Create room if it doesn't exist
-      if (!rooms.has(currentRoom)) {
-        rooms.set(currentRoom, { 
-          users: new Map(), 
-          files: new Map([
-            ['index.js', '// Welcome to collaborative coding!\nconsole.log("Hello, world!");\n'],
-            ['README.md', '# Collaborative Workspace\n\nStart coding together!\n']
-          ])
+      const wsUrl = `ws://localhost:8080/collab`;
+      console.log('🔌 Creating NEW WebSocket connection to:', wsUrl);
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        if (isUnmountingRef.current) {
+          ws.close();
+          return;
+        }
+        setConnected(true);
+        setConnectionError(null);
+        console.log('✅ WebSocket connected successfully');
+
+        ws.send(JSON.stringify({
+          type: 'join',
+          user: {
+            id: username,
+            name: username,
+            color: userColorRef.current
+          },
+          roomId
+        }));
+      };
+
+      ws.onmessage = (event) => {
+        if (isUnmountingRef.current) return;
+        try {
+          const message = JSON.parse(event.data);
+          queueOperation(() => handleWebSocketMessage(message));
+        } catch (error) {
+          console.error('❌ Failed to parse WebSocket message:', error);
+        }
+      };
+
+      ws.onclose = (event) => {
+        console.log(`🔌 WebSocket closed. Code: ${event.code}, Reason: ${event.reason}`);
+        setConnected(false);
+        setActiveUsers(new Map());
+
+        if (reconnectTimeoutRef.current) {
+          clearTimeout(reconnectTimeoutRef.current);
+        }
+
+        if (!isUnmountingRef.current && event.code !== 1000) {
+          console.log('🔄 Attempting to reconnect in 3 seconds...');
+          reconnectTimeoutRef.current = setTimeout(() => {
+            if (!isUnmountingRef.current) {
+              connectWebSocket();
+            }
+          }, 3000);
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error('❌ WebSocket error:', error);
+        setConnectionError('Connection failed - check if server is running');
+      };
+
+    } catch (error) {
+      setConnectionError('Unable to establish WebSocket connection');
+      console.error('❌ WebSocket connection error:', error);
+    }
+  }, [roomId, username, queueOperation]);
+
+  // Handle incoming WebSocket messages
+  const handleWebSocketMessage = useCallback((message) => {
+    switch (message.type) {
+      case 'user-joined':
+        setActiveUsers(prev => new Map(prev.set(message.user.id, message.user)));
+        break;
+        
+      case 'user-left':
+        setActiveUsers(prev => {
+          const newUsers = new Map(prev);
+          newUsers.delete(message.userId);
+          return newUsers;
         });
-        console.log(`🏠 Created new room: ${currentRoom}`);
-      }
-      
-      const room = rooms.get(currentRoom);
-      room.users.set(userId, userInfo);
-      
-      // Send current state to new user
-      ws.send(JSON.stringify({
-        type: 'users-list',
-        users: Array.from(room.users.values()).map(u => ({
-          id: u.id,
-          name: u.name,
-          color: u.color
-        }))
-      }));
-      
-      ws.send(JSON.stringify({
-        type: 'file-list',
-        files: Object.fromEntries(room.files)
-      }));
-      
-      // Notify other users about new user
-      broadcastToRoom({
-        type: 'user-joined',
-        user: message.user
-      }, ws);
-      
-      console.log(`✅ User ${userId} successfully joined room ${currentRoom}`);
-      
-    } catch (error) {
-      console.error('❌ Error in handleUserJoin:', error);
-      ws.send(JSON.stringify({
-        type: 'error',
-        error: 'Failed to join room'
-      }));
-    }
-  }
+        break;
+        
+      case 'users-list':
+        setActiveUsers(new Map(message.users.map(user => [user.id, user])));
+        break;
+        
+      case 'file-operation':
+        handleFileOperation(message);
+        break;
+        
+      case 'cursor-position':
+        handleCursorUpdate(message);
+        break;
+        
+      case 'file-list':
+        // Sync file list and update local files
+        const newFiles = new Map();
+        Object.entries(message.files).forEach(([filename, content]) => {
+          newFiles.set(filename, content);
+          lastSyncedContent.current.set(filename, content);
+        });
+        setFiles(newFiles);
+        console.log('📄 Synced files from server:', Array.from(newFiles.keys()));
+        
+        // Handle pending file switch
+        if (pendingFileSwitch.current && newFiles.has(pendingFileSwitch.current)) {
+          const pendingFile = pendingFileSwitch.current;
+          pendingFileSwitch.current = null;
+          
+          // Update editor content if needed
+          if (editorRef.current && pendingFile === activeFile) {
+            const content = newFiles.get(pendingFile);
+            const currentContent = editorRef.current.getValue();
+            if (content !== currentContent) {
+              isLocalChangeRef.current = true;
+              editorRef.current.setValue(content);
+              setTimeout(() => { isLocalChangeRef.current = false; }, 100);
+            }
+          }
+        }
+        break;
+        
+      case 'file-created':
+        if (message.userId !== username) {
+          setFiles(prev => {
+            const newFiles = new Map(prev);
+            newFiles.set(message.filename, message.content);
+            lastSyncedContent.current.set(message.filename, message.content);
+            return newFiles;
+          });
+          console.log(`📄 File created by ${message.userId}: ${message.filename}`);
+        }
+        break;
+        
+      case 'file-deleted':
+        if (message.userId !== username) {
+          setFiles(prev => {
+            const newFiles = new Map(prev);
+            newFiles.delete(message.filename);
+            lastSyncedContent.current.delete(message.filename);
+            return newFiles;
+          });
+          
+          if (message.filename === activeFile) {
+            setFiles(currentFiles => {
+              const remaining = Array.from(currentFiles.keys()).filter(f => f !== message.filename);
+              if (remaining.length > 0) {
+                setActiveFile(remaining[0]);
+              }
+              return currentFiles;
+            });
+          }
+          console.log(`🗑️ File deleted by ${message.userId}: ${message.filename}`);
+        }
+        break;
 
-  // Handle file operations (insert, delete, replace)
-  function handleFileOperation(message) {
+      case 'file-content':
+        if (message.filename && message.content !== undefined) {
+          setFiles(prev => {
+            const newFiles = new Map(prev);
+            newFiles.set(message.filename, message.content);
+            lastSyncedContent.current.set(message.filename, message.content);
+            return newFiles;
+          });
+          
+          // Update editor if this is the active file
+          if (message.filename === activeFile && editorRef.current) {
+            const currentContent = editorRef.current.getValue();
+            if (message.content !== currentContent) {
+              isLocalChangeRef.current = true;
+              editorRef.current.setValue(message.content);
+              setTimeout(() => { isLocalChangeRef.current = false; }, 100);
+            }
+          }
+          
+          console.log(`📄 File content synced: ${message.filename}`);
+        }
+        break;
+        
+      case 'error':
+        console.error('Server error:', message.error);
+        setConnectionError(message.error);
+        break;
+        
+      default:
+        console.warn('Unknown message type:', message.type);
+    }
+  }, [username, activeFile]);
+
+  // Apply text operation to content
+  const applyOperationToContent = useCallback((content, operation) => {
     try {
-      const { operation, filename, userId: senderId } = message;
-      
-      if (!currentRoom) return;
-      
-      const room = rooms.get(currentRoom);
-      if (!room) return;
-      
-      // Apply operation to server-side file content
-      let content = room.files.get(filename) || '';
+      const lines = content.split('\n');
       
       switch (operation.type) {
         case 'insert':
-          const lines = content.split('\n');
-          const lineIndex = operation.position.lineNumber - 1;
-          const columnIndex = operation.position.column - 1;
+          const lineIndex = Math.max(0, Math.min(operation.position.lineNumber - 1, lines.length - 1));
+          const columnIndex = Math.max(0, Math.min(operation.position.column - 1, lines[lineIndex]?.length || 0));
           
-          if (lines[lineIndex]) {
-            lines[lineIndex] = 
-              lines[lineIndex].slice(0, columnIndex) + 
-              operation.text + 
-              lines[lineIndex].slice(columnIndex);
+          if (lines[lineIndex] !== undefined) {
+            lines[lineIndex] = lines[lineIndex].slice(0, columnIndex) + 
+                              operation.text + 
+                              lines[lineIndex].slice(columnIndex);
           }
-          content = lines.join('\n');
           break;
-          
+
         case 'delete':
-          const deleteLines = content.split('\n');
-          const startLine = operation.range.startLineNumber - 1;
-          const endLine = operation.range.endLineNumber - 1;
-          const startCol = operation.range.startColumn - 1;
-          const endCol = operation.range.endColumn - 1;
-          
-          if (startLine === endLine) {
-            deleteLines[startLine] = 
-              deleteLines[startLine].slice(0, startCol) + 
-              deleteLines[startLine].slice(endCol);
-          } else {
-            deleteLines[startLine] = deleteLines[startLine].slice(0, startCol);
-            deleteLines.splice(startLine + 1, endLine - startLine);
+          const startLine = Math.max(0, Math.min(operation.range.startLineNumber - 1, lines.length - 1));
+          const endLine = Math.max(0, Math.min(operation.range.endLineNumber - 1, lines.length - 1));
+          const startCol = Math.max(0, Math.min(operation.range.startColumn - 1, lines[startLine]?.length || 0));
+          const endCol = Math.max(0, Math.min(operation.range.endColumn - 1, lines[endLine]?.length || 0));
+
+          if (startLine === endLine && lines[startLine] !== undefined) {
+            lines[startLine] = lines[startLine].slice(0, startCol) + 
+                              lines[startLine].slice(endCol);
+          } else if (lines[startLine] !== undefined && lines[endLine] !== undefined) {
+            lines[startLine] = lines[startLine].slice(0, startCol) + 
+                              lines[endLine].slice(endCol);
+            lines.splice(startLine + 1, endLine - startLine);
           }
-          content = deleteLines.join('\n');
           break;
-          
+
         case 'replace':
-          const replaceLines = content.split('\n');
-          const rStartLine = operation.range.startLineNumber - 1;
-          const rEndLine = operation.range.endLineNumber - 1;
-          const rStartCol = operation.range.startColumn - 1;
-          const rEndCol = operation.range.endColumn - 1;
-          
-          if (rStartLine === rEndLine) {
-            replaceLines[rStartLine] = 
-              replaceLines[rStartLine].slice(0, rStartCol) + 
-              operation.text + 
-              replaceLines[rStartLine].slice(rEndCol);
+          const rStartLine = Math.max(0, Math.min(operation.range.startLineNumber - 1, lines.length - 1));
+          const rEndLine = Math.max(0, Math.min(operation.range.endLineNumber - 1, lines.length - 1));
+          const rStartCol = Math.max(0, Math.min(operation.range.startColumn - 1, lines[rStartLine]?.length || 0));
+          const rEndCol = Math.max(0, Math.min(operation.range.endColumn - 1, lines[rEndLine]?.length || 0));
+
+          if (rStartLine === rEndLine && lines[rStartLine] !== undefined) {
+            lines[rStartLine] = lines[rStartLine].slice(0, rStartCol) + 
+                              operation.text + 
+                              lines[rStartLine].slice(rEndCol);
+          } else if (lines[rStartLine] !== undefined && lines[rEndLine] !== undefined) {
+            const newText = operation.text.split('\n');
+            lines[rStartLine] = lines[rStartLine].slice(0, rStartCol) + newText[0];
+            
+            if (newText.length > 1) {
+              lines.splice(rStartLine + 1, rEndLine - rStartLine, ...newText.slice(1, -1));
+              if (lines[rStartLine + newText.length - 1] !== undefined) {
+                lines[rStartLine + newText.length - 1] = newText[newText.length - 1] + 
+                                                         lines[rEndLine].slice(rEndCol);
+              }
+            } else {
+              lines[rStartLine] += lines[rEndLine].slice(rEndCol);
+              lines.splice(rStartLine + 1, rEndLine - rStartLine);
+            }
           }
-          content = replaceLines.join('\n');
           break;
       }
       
-      // Update server-side content
-      room.files.set(filename, content);
-      
-      // Broadcast to other users
-      broadcastToRoom(message, ws);
-      
+      return lines.join('\n');
     } catch (error) {
-      console.error('❌ Error in handleFileOperation:', error);
+      console.error('Error applying operation:', error);
+      return content; // Return original content if operation fails
     }
-  }
+  }, []);
 
-  // Handle new file creation
-  function handleFileCreated(message) {
-    try {
-      const { filename, content } = message;
+  // Handle file operations from other users
+  const handleFileOperation = useCallback((message) => {
+    if (message.userId === username) return;
+    
+    const { operation, filename } = message;
+    
+    // Update the file content in our local state
+    setFiles(prev => {
+      const currentContent = prev.get(filename) || '';
+      const newContent = applyOperationToContent(currentContent, operation);
       
-      if (!currentRoom) return;
-      
-      const room = rooms.get(currentRoom);
-      if (!room) return;
-      
-      room.files.set(filename, content || '// New file\n');
-      
-      console.log(`📄 File created: ${filename} in room ${currentRoom}`);
-      
-      // Broadcast to all users in room
-      broadcastToRoom(message, null); // null means broadcast to all
-      
-    } catch (error) {
-      console.error('❌ Error in handleFileCreated:', error);
-    }
-  }
+      const newFiles = new Map(prev);
+      newFiles.set(filename, newContent);
+      lastSyncedContent.current.set(filename, newContent);
+      return newFiles;
+    });
 
-  // Handle file deletion
-  function handleFileDeleted(message) {
-    try {
-      const { filename } = message;
-      
-      if (!currentRoom) return;
-      
-      const room = rooms.get(currentRoom);
-      if (!room) return;
-      
-      room.files.delete(filename);
-      
-      console.log(`🗑️ File deleted: ${filename} from room ${currentRoom}`);
-      
-      // Broadcast to all users in room
-      broadcastToRoom(message, null);
-      
-    } catch (error) {
-      console.error('❌ Error in handleFileDeleted:', error);
-    }
-  }
+    // If this operation is for the currently active file, also apply it to the editor
+    if (filename === activeFile && editorRef.current) {
+      isLocalChangeRef.current = true;
 
-  // Broadcast message to all users in current room except sender
-  function broadcastToRoom(message, sender) {
-    if (!currentRoom) return;
-    
-    const room = rooms.get(currentRoom);
-    if (!room) return;
-    
-    let broadcastCount = 0;
-    
-    room.users.forEach((user, id) => {
-      if (user.ws && user.ws !== sender && user.ws.readyState === WebSocket.OPEN) {
-        try {
-          user.ws.send(JSON.stringify(message));
-          broadcastCount++;
-        } catch (error) {
-          console.error(`❌ Failed to send to user ${id}:`, error);
-          // Remove dead connection
-          room.users.delete(id);
+      try {
+        const monaco = window.monaco;
+        switch (operation.type) {
+          case 'insert':
+            editorRef.current.executeEdits('collaboration', [{
+              range: new monaco.Range(
+                operation.position.lineNumber,
+                operation.position.column,
+                operation.position.lineNumber,
+                operation.position.column
+              ),
+              text: operation.text
+            }]);
+            break;
+            
+          case 'delete':
+            editorRef.current.executeEdits('collaboration', [{
+              range: new monaco.Range(
+                operation.range.startLineNumber,
+                operation.range.startColumn,
+                operation.range.endLineNumber,
+                operation.range.endColumn
+              ),
+              text: ''
+            }]);
+            break;
+            
+          case 'replace':
+            editorRef.current.executeEdits('collaboration', [{
+              range: new monaco.Range(
+                operation.range.startLineNumber,
+                operation.range.startColumn,
+                operation.range.endLineNumber,
+                operation.range.endColumn
+              ),
+              text: operation.text
+            }]);
+            break;
         }
+      } catch (error) {
+        console.error('Failed to apply operation to editor:', error);
       }
+
+      setTimeout(() => {
+        isLocalChangeRef.current = false;
+      }, 100);
+    }
+  }, [username, activeFile, applyOperationToContent]);
+
+  // Handle cursor position updates
+  const handleCursorUpdate = useCallback((message) => {
+    if (message.userId === username) return;
+    
+    setActiveUsers(prev => {
+      const newUsers = new Map(prev);
+      const user = newUsers.get(message.userId);
+      if (user) {
+        newUsers.set(message.userId, { 
+          ...user, 
+          cursor: message.position,
+          filename: message.filename 
+        });
+      }
+      return newUsers;
+    });
+  }, [username]);
+
+  // Send message helper
+  const sendMessage = useCallback((message) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify(message));
+      return true;
+    }
+    return false;
+  }, []);
+
+  // Send file operation to other users
+  const sendFileOperation = useCallback((operation, filename) => {
+    sendMessage({
+      type: 'file-operation',
+      operation,
+      filename,
+      userId: username,
+      roomId
+    });
+  }, [sendMessage, username, roomId]);
+
+  // Send cursor position to other users
+  const sendCursorPosition = useCallback((position, filename) => {
+    sendMessage({ 
+      type: 'cursor-position', 
+      position, 
+      filename,
+      userId: username, 
+      roomId 
+    });
+  }, [sendMessage, username, roomId]);
+
+  // Request file content when switching files
+  const requestFileContent = useCallback((filename) => {
+    const success = sendMessage({
+      type: 'request-file-content',
+      filename,
+      userId: username,
+      roomId
     });
     
-    if (sender === null) { // Broadcast to all including sender
-      room.users.forEach((user, id) => {
-        if (user.ws && user.ws.readyState === WebSocket.OPEN) {
-          try {
-            user.ws.send(JSON.stringify(message));
-            broadcastCount++;
-          } catch (error) {
-            console.error(`❌ Failed to send to user ${id}:`, error);
-            room.users.delete(id);
-          }
+    if (success) {
+      pendingFileSwitch.current = filename;
+    }
+  }, [sendMessage, username, roomId]);
+
+  // Initialize WebSocket connection
+  useEffect(() => {
+    isUnmountingRef.current = false;
+    console.log('🚀 Component mounted, setting up WebSocket...');
+
+    const timeoutId = setTimeout(() => {
+      if (!isUnmountingRef.current) {
+        connectWebSocket();
+      }
+    }, 500);
+
+    return () => {
+      console.log('🧹 Component unmounting, cleaning up...');
+      isUnmountingRef.current = true;
+      clearTimeout(timeoutId);
+
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+
+      if (wsRef.current) {
+        if (wsRef.current.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({
+            type: 'leave',
+            userId: username,
+            roomId
+          }));
         }
+        wsRef.current.close(1000, 'Component unmounting');
+        wsRef.current = null;
+      }
+    };
+  }, []);
+
+  // Handle room/username changes
+  useEffect(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      console.log('🔄 Room or username changed, rejoining...');
+      wsRef.current.send(JSON.stringify({
+        type: 'join',
+        user: {
+          id: username,
+          name: username,
+          color: userColorRef.current
+        },
+        roomId
+      }));
+    }
+  }, [roomId, username]);
+
+  // Handle file switching with proper sync
+  useEffect(() => {
+    if (connected && activeFile) {
+      // Request the latest file content from server
+      requestFileContent(activeFile);
+      
+      // Send cursor position for the new file
+      if (editorRef.current) {
+        const position = editorRef.current.getPosition();
+        if (position) {
+          sendCursorPosition({
+            lineNumber: position.lineNumber,
+            column: position.column
+          }, activeFile);
+        }
+      }
+    }
+  }, [activeFile, connected, sendCursorPosition, requestFileContent]);
+
+  // Handle editor changes with debouncing
+  const handleEditorChange = useCallback((value, event) => {
+    if (isLocalChangeRef.current) return;
+
+    // Update local state immediately
+    setFiles(prev => new Map(prev.set(activeFile, value || '')));
+
+    // Send operations to other users
+    if (event?.changes && connected) {
+      event.changes.forEach(change => {
+        const operation = {
+          type: change.text ? (change.rangeLength > 0 ? 'replace' : 'insert') : 'delete',
+          range: change.rangeLength > 0 ? {
+            startLineNumber: change.range.startLineNumber,
+            startColumn: change.range.startColumn,
+            endLineNumber: change.range.endLineNumber,
+            endColumn: change.range.endColumn
+          } : undefined,
+          position: change.rangeLength === 0 ? {
+            lineNumber: change.range.startLineNumber,
+            column: change.range.startColumn
+          } : undefined,
+          text: change.text
+        };
+        
+        sendFileOperation(operation, activeFile);
       });
     }
-    
-    console.log(`📡 Broadcasted ${message.type} to ${broadcastCount} users in room ${currentRoom}`);
-  }
+  }, [activeFile, sendFileOperation, connected]);
 
-  // Handle connection close
-  ws.on('close', (code, reason) => {
-    console.log(`👋 Connection ${connectionId} closed - Code: ${code}, Active: ${wss.clients.size - 1}`);
-    
-    clearInterval(heartbeatInterval);
-    
-    if (currentRoom && userId) {
-      const room = rooms.get(currentRoom);
-      if (room) {
-        room.users.delete(userId);
-        
-        // Notify other users
-        broadcastToRoom({
-          type: 'user-left',
-          userId
-        }, ws);
-        
-        // Clean up empty rooms
-        if (room.users.size === 0) {
-          rooms.delete(currentRoom);
-          console.log(`🧹 Cleaned up empty room: ${currentRoom}`);
-        }
-      }
-    }
-  });
+  // Handle cursor position changes
+  const handleCursorPositionChange = useCallback((event) => {
+    if (!event?.position || !connected) return;
+    sendCursorPosition({
+      lineNumber: event.position.lineNumber,
+      column: event.position.column
+    }, activeFile);
+  }, [sendCursorPosition, activeFile, connected]);
 
-  // Handle connection errors
-  ws.on('error', (error) => {
-    console.error(`❌ WebSocket error (${connectionId}):`, error.message);
-  });
-});
+  // Create new file
+  const createNewFile = useCallback(() => {
+    const base = "new-file";
+    let i = 1;
+    let name;
+    do {
+      name = `${base}-${i}.js`;
+      i++;
+    } while (files.has(name));
 
-// REST API endpoints for room management
-app.get('/api/rooms', (req, res) => {
-  const roomList = Array.from(rooms.keys()).map(roomId => ({
-    id: roomId,
-    users: rooms.get(roomId).users.size,
-    files: rooms.get(roomId).files.size
-  }));
-  
-  res.json({ rooms: roomList });
-});
+    const newContent = "// Start coding...\n";
+    setFiles(prev => new Map(prev.set(name, newContent)));
+    setActiveFile(name);
 
-app.get('/api/rooms/:roomId', (req, res) => {
-  const { roomId } = req.params;
-  const room = rooms.get(roomId);
-  
-  if (!room) {
-    return res.status(404).json({ error: 'Room not found' });
-  }
-  
-  res.json({
-    id: roomId,
-    users: Array.from(room.users.values()).map(u => ({
-      id: u.id,
-      name: u.name,
-      color: u.color,
-      lastSeen: u.lastSeen
-    })),
-    files: Object.fromEntries(room.files)
-  });
-});
-
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    rooms: rooms.size,
-    totalUsers: Array.from(rooms.values()).reduce((sum, room) => sum + room.users.size, 0)
-  });
-});
-
-// Serve static files for testing
-app.get('/', (req, res) => {
-  res.send(`
-    <h1>🚀 Collaborative Code Server</h1>
-    <p><strong>Status:</strong> Running</p>
-    <p><strong>WebSocket URL:</strong> ws://localhost:8080/collab</p>
-    <p><strong>Active Rooms:</strong> ${rooms.size}</p>
-    <p><strong>Total Users:</strong> ${Array.from(rooms.values()).reduce((sum, room) => sum + room.users.size, 0)}</p>
-    <br>
-    <h3>API Endpoints:</h3>
-    <ul>
-      <li><a href="/api/rooms">GET /api/rooms</a> - List all rooms</li>
-      <li><a href="/health">GET /health</a> - Health check</li>
-    </ul>
-  `);
-  // Send welcome message
-  ws.send(JSON.stringify({
-    type: 'welcome',
-    message: 'Connected to collaboration server',
-    connectionId
-  }));
-});
-
-// Clean up dead connections every 30 seconds
-setInterval(() => {
-  wss.clients.forEach((ws) => {
-    if (!ws.isAlive) {
-      console.log('💀 Terminating dead connection');
-      ws.terminate();
-      return;
-    }
-    ws.isAlive = false;
-    ws.ping();
-  });
-}, 30000);
-setInterval(() => {
-  const now = Date.now();
-  const fiveMinutes = 5 * 60 * 1000;
-  
-  rooms.forEach((room, roomId) => {
-    // Remove inactive users
-    room.users.forEach((user, userId) => {
-      if (now - user.lastSeen > fiveMinutes) {
-        room.users.delete(userId);
-        console.log(`🧹 Removed inactive user ${userId} from room ${roomId}`);
-      }
+    sendMessage({
+      type: 'file-created',
+      filename: name,
+      content: newContent,
+      userId: username,
+      roomId
     });
+  }, [files, sendMessage, username, roomId]);
+
+  // Delete file
+  const deleteFile = useCallback((name) => {
+    if (files.size <= 1) return;
+
+    setFiles(prev => {
+      const newFiles = new Map(prev);
+      newFiles.delete(name);
+      return newFiles;
+    });
+
+    if (name === activeFile) {
+      const remainingFiles = Array.from(files.keys()).filter(f => f !== name);
+      setActiveFile(remainingFiles[0]);
+    }
+
+    sendMessage({
+      type: 'file-deleted',
+      filename: name,
+      userId: username,
+      roomId
+    });
+  }, [files, activeFile, sendMessage, username, roomId]);
+
+  // Download file
+  const downloadFile = useCallback((name) => {
+    const content = files.get(name) || "";
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [files]);
+
+  // Handle file upload
+  const handleFileUpload = useCallback((ev) => {
+    const file = ev.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const content = reader.result;
+      setFiles(prev => new Map(prev.set(file.name, content)));
+      setActiveFile(file.name);
+
+      sendMessage({
+        type: 'file-created',
+        filename: file.name,
+        content,
+        userId: username,
+        roomId
+      });
+    };
+    reader.readAsText(file);
+    ev.target.value = null;
+  }, [sendMessage, username, roomId]);
+
+  // Detect language from filename
+  const detectLanguage = useCallback((filename) => {
+    const ext = filename.split(".").pop()?.toLowerCase();
+    const langMap = {
+      js: "javascript", jsx: "javascript", ts: "typescript", tsx: "typescript",
+      json: "json", md: "markdown", py: "python", css: "css", html: "html",
+      scss: "scss", less: "less", xml: "xml", yaml: "yaml", yml: "yaml"
+    };
+    return langMap[ext] || "plaintext";
+  }, []);
+
+  // Get file icon color
+  const getFileIcon = useCallback((filename) => {
+    const ext = filename.split(".").pop()?.toLowerCase();
+    const colors = {
+      js: "#f7df1e", jsx: "#61dafb", ts: "#3178c6", tsx: "#3178c6",
+      json: "#000000", md: "#ffffff", py: "#3776ab", css: "#1572b6",
+      html: "#e34f26", scss: "#cf649a"
+    };
+    return colors[ext] || "#6b7280";
+  }, []);
+
+  // Handle editor mount
+  const handleEditorMount = useCallback((editor, monaco) => {
+    editorRef.current = editor;
+
+    editor.updateOptions({
+      fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
+      fontSize: 14,
+      lineHeight: 1.6,
+      minimap: { enabled: false },
+      scrollBeyondLastLine: false,
+      smoothScrolling: true,
+      cursorBlinking: 'smooth',
+      renderLineHighlight: 'gutter',
+      selectOnLineNumbers: true,
+      automaticLayout: true
+    });
+
+    editor.onDidChangeCursorPosition(handleCursorPositionChange);
+
+    let decorationIds = [];
     
-    // Remove empty rooms
-    if (room.users.size === 0) {
-      rooms.delete(roomId);
-      console.log(`🧹 Removed empty room ${roomId}`);
-    }
-  });
-}, 5 * 60 * 1000);
+    const updateCollaborativeCursors = () => {
+      const decorations = [];
+      
+      activeUsers.forEach((user, userId) => {
+        if (user.cursor && user.filename === activeFile && userId !== username) {
+          decorations.push({
+            range: new monaco.Range(
+              user.cursor.lineNumber,
+              user.cursor.column,
+              user.cursor.lineNumber,
+              user.cursor.column
+            ),
+            options: {
+              className: 'collaborative-cursor',
+              hoverMessage: { 
+                value: `**${user.name}** is editing at line ${user.cursor.lineNumber}` 
+              },
+              beforeContentClassName: 'collaborative-cursor-before',
+              before: {
+                content: `${user.name}`,
+                inlineClassName: 'collaborative-cursor-label',
+                backgroundColor: user.color
+              }
+            }
+          });
+        }
+      });
 
-// Start server
-const PORT = process.env.PORT || 8080;
-server.listen(PORT, () => {
-  console.log(`
-🎉 Collaborative Code Server is running!
-📡 WebSocket: ws://localhost:${PORT}/collab
-🌐 HTTP: http://localhost:${PORT}
-🏠 Rooms: ${rooms.size}
-👥 Users: 0
+      decorationIds = editor.deltaDecorations(decorationIds, decorations);
+    };
 
-Ready for collaborative coding! 🚀
-  `);
-});
+    const interval = setInterval(updateCollaborativeCursors, 500);
+    
+    return () => {
+      clearInterval(interval);
+      if (decorationIds.length > 0) {
+        editor.deltaDecorations(decorationIds, []);
+      }
+    };
+  }, [handleCursorPositionChange, activeUsers, activeFile, username]);
 
-// Graceful shutdown
-process.on('SIGINT', () => {
-  console.log('\n🔄 Shutting down server...');
-  
-  // Close all WebSocket connections
-  wss.clients.forEach(client => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify({
-        type: 'server-shutdown',
-        message: 'Server is shutting down'
-      }));
-      client.close();
-    }
-  });
-  
-  server.close(() => {
-    console.log('✅ Server shut down gracefully');
-    process.exit(0);
-  });
-});
+  return (
+    <div className="h-screen bg-gray-50 flex overflow-hidden">
+      {/* CSS Styles for collaborative cursors */}
+      <style jsx global>{`
+        .collaborative-cursor {
+          background-color: transparent !important;
+          border-left: 2px solid;
+          position: relative;
+        }
 
-module.exports = { app, server, wss };
+        .collaborative-cursor-before {
+          position: relative;
+        }
+
+        .collaborative-cursor-label {
+          position: absolute;
+          top: -20px;
+          left: -5px;
+          padding: 2px 6px;
+          border-radius: 3px;
+          font-size: 11px;
+          font-weight: 500;
+          color: white;
+          white-space: nowrap;
+          z-index: 1000;
+        }
+
+        .collaborative-cursor-label::after {
+          content: '';
+          position: absolute;
+          top: 100%;
+          left: 6px;
+          width: 0;
+          height: 0;
+          border-left: 4px solid transparent;
+          border-right: 4px solid transparent;
+          border-top: 4px solid;
+          border-top-color: inherit;
+        }
+      `}</style>
+
+      {/* Sidebar */}
+      <div className={`bg-white border-r border-gray-200 transition-all duration-300 ${
+        sidebarCollapsed ? 'w-12' : 'w-80'
+      }`}>
+        {/* Sidebar Header */}
+        <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+          {!sidebarCollapsed && (
+            <div>
+              <h1 className="text-lg font-semibold text-gray-900">Workspace</h1>
+              <p className="text-sm text-gray-500">Room: {roomId}</p>
+            </div>
+          )}
+          <button
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <Code size={16} />
+          </button>
+        </div>
+
+        {!sidebarCollapsed && (
+          <>
+            {/* Connection Status */}
+            <div className="p-4 border-b border-gray-200">
+              <div className="flex items-center gap-2 mb-3">
+                {connected ? (
+                  <div className="flex items-center gap-2 text-green-600">
+                    <Wifi size={16} />
+                    <span className="text-sm font-medium">Connected</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 text-red-600">
+                    <WifiOff size={16} />
+                    <span className="text-sm font-medium">Disconnected</span>
+                  </div>
+                )}
+              </div>
+              
+              {connectionError && (
+                <div className="flex items-center gap-2 text-amber-600 bg-amber-50 p-2 rounded-lg mb-3">
+                  <AlertCircle size={14} />
+                  <span className="text-xs">{connectionError}</span>
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="text-sm border border-gray-300 rounded px-2 py-1 flex-1"
+                  placeholder="Your name"
+                />
+                <input
+                  type="text"
+                  value={roomId}
+                  onChange={(e) => setRoomId(e.target.value)}
+                  className="text-sm border border-gray-300 rounded px-2 py-1 flex-1"
+                                    placeholder="Room ID"
+                />
+              </div>
+            </div>
+
+            {/* Files List */}
+            <div className="p-4 border-b border-gray-200">
+              <div className="flex justify-between items-center mb-2">
+                <h2 className="text-sm font-semibold text-gray-700">Files</h2>
+                <div className="flex gap-2">
+                  <button
+                    onClick={createNewFile}
+                    className="p-1 hover:bg-gray-100 rounded"
+                    title="New File"
+                  >
+                    <Plus size={16} />
+                  </button>
+                  <label className="p-1 hover:bg-gray-100 rounded cursor-pointer" title="Upload File">
+                    <Upload size={16} />
+                    <input
+                      type="file"
+                      className="hidden"
+                      onChange={handleFileUpload}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <ul className="space-y-1">
+                {Array.from(files.keys()).map((filename) => (
+                  <li
+                    key={filename}
+                    className={`flex items-center justify-between p-2 rounded cursor-pointer ${
+                      filename === activeFile
+                        ? "bg-blue-50 text-blue-700"
+                        : "hover:bg-gray-100"
+                    }`}
+                    onClick={() => setActiveFile(filename)}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: getFileIcon(filename) }}
+                      />
+                      <span className="text-sm font-medium">{filename}</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          downloadFile(filename);
+                        }}
+                        title="Download"
+                        className="p-1 hover:bg-gray-200 rounded"
+                      >
+                        <Download size={14} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteFile(filename);
+                        }}
+                        title="Delete"
+                        className="p-1 hover:bg-gray-200 rounded text-red-600"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Active Users */}
+            {showPresence && (
+              <div className="p-4">
+                <h2 className="text-sm font-semibold text-gray-700 mb-2">
+                  Active Users
+                </h2>
+                <ul className="space-y-1">
+                  {Array.from(activeUsers.values()).map((user) => (
+                    <li key={user.id} className="flex items-center gap-2">
+                      <span
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: user.color }}
+                      />
+                      <span className="text-sm">{user.name}</span>
+                      {user.filename && (
+                        <span className="text-xs text-gray-500">
+                          ({user.filename} - line {user.cursor?.lineNumber || "?"})
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Main Editor Area */}
+      <div className="flex-1 flex flex-col">
+        <div className="flex-1">
+          <Editor
+            height="100%"
+            language={detectLanguage(activeFile)}
+            value={files.get(activeFile)}
+            onChange={handleEditorChange}
+            onMount={handleEditorMount}
+            theme="vs-dark"
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
