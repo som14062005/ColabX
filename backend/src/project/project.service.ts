@@ -258,4 +258,27 @@ export class ProjectService {
 
     return this.categorizeProjects(projects, userId);
   }
+  async getProjectMembers(projectId: string) {
+  if (!Types.ObjectId.isValid(projectId)) {
+    throw new BadRequestException('Invalid project ID');
+  }
+
+  const project = await this.projectModel
+    .findById(projectId)
+    .populate('members', 'username displayName email') // populate with desired fields
+    .populate('owner', 'username displayName email')   // if you also want owner details
+    .exec();
+
+  if (!project) {
+    throw new NotFoundException('Project not found');
+  }
+
+  return {
+    owner: project.owner,
+    members: project.members,
+  };
+}
+
+
+
 }

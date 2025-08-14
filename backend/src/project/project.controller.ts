@@ -116,4 +116,18 @@ export class ProjectController {
     if (!userId) throw new UnauthorizedException('User ID missing');
     return this.projectService.getAllProjectsForUser(userId);
   }
+  @Get(':id/members')
+async getProjectMembers(@Req() req, @Param('id') projectId: string) {
+  const userId = this.getUserIdFromReq(req);
+  if (!userId) throw new UnauthorizedException('User ID missing');
+
+  const isOwner = await this.projectService.isProjectOwner(userId, projectId);
+  if (!isOwner) {
+    throw new HttpException('Forbidden', HttpStatus.FORBIDDEN);
+  }
+
+  return this.projectService.getProjectMembers(projectId);
+}
+
+
 }

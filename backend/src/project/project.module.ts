@@ -7,14 +7,13 @@ import { JoinRequest, JoinRequestSchema } from './schemas/join-request.schema';
 
 @Module({
   imports: [
-    // Register Project and JoinRequest schemas with Mongoose
     MongooseModule.forFeature([
       { name: Project.name, schema: ProjectSchema },
       { name: JoinRequest.name, schema: JoinRequestSchema }
     ]),
   ],
-  controllers: [ProjectController],   // Your project endpoints here
-  providers: [ProjectService],        // Business logic for projects
-  exports: [ProjectService],          // Export service if needed elsewhere
+  controllers: [ProjectController],
+  providers: [ProjectService],
+  exports: [ProjectService], // Keep only the service here if needed in other modules
 })
 export class ProjectModule {}

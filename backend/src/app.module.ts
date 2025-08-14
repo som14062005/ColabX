@@ -5,6 +5,8 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { NotificationsModule } from './notifications/notifications.module'; // ✅ FIXED NAME
 import { ProjectModule } from './project/project.module';
+import { TasksMemberModule } from './tasks-member/tasks-member.module';
+import { TasksLeadModule } from './tasks-lead/tasks-lead.module';
 
 @Module({
   imports: [
@@ -13,7 +15,9 @@ import { ProjectModule } from './project/project.module';
     AuthModule,
     UsersModule,
     NotificationsModule, // ✅ FIXED NAME
-    ProjectModule,
+    ProjectModule, 
+    TasksMemberModule, 
+    TasksLeadModule,
   ],
 })
 export class AppModule {}

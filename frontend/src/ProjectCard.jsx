@@ -647,21 +647,27 @@ function ProjectDetailModal({ project, onClose, onJoinRequest, hasRequested, isR
 
           {/* NEW BLINKING GO TO PROJECT BUTTON */}
           <button
-            onClick={() => navigate(`/projects/${project._id || project.id}`)}
-            style={{
-              background: "#ff9800",
-              border: "none",
-              padding: "10px 20px",
-              borderRadius: 8,
-              color: "#fff",
-              cursor: "pointer",
-              fontWeight: 700,
-              fontSize: 14,
-              animation: "blinker 1s linear infinite",
-            }}
-          >
-            🚀 Go To Project
-          </button>
+  onClick={() => {
+    const id = project._id || project.id;
+    sessionStorage.setItem("currentProjectId", id);
+    console.log(`✅ Saved Project ID in sessionStorage: ${id}`);
+    navigate(`/projects/${id}`);
+  }}
+  style={{
+    background: "#ff9800",
+    border: "none",
+    padding: "10px 20px",
+    borderRadius: 8,
+    color: "#fff",
+    cursor: "pointer",
+    fontWeight: 700,
+    fontSize: 14,
+    animation: "blinker 1s linear infinite",
+  }}
+>
+  🚀 Go To Project
+</button>
+
         </div>
       </div>
 

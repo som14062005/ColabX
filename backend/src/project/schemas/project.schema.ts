@@ -40,11 +40,12 @@ export class Project {
   @Prop({ trim: true })
   difficulty: string;
 
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
-  owner: Types.ObjectId;
+ @Prop({ type: Types.ObjectId, ref: 'User', required: true })
+owner: Types.ObjectId;
 
-  @Prop({ type: [Types.ObjectId], ref: 'User', default: [] })
-  members: Types.ObjectId[];
+@Prop({ type: [Types.ObjectId], ref: 'User', default: [] })
+members: Types.ObjectId[];
+
 
   @Prop({ type: [JoinRequestSchema], default: [] })
   joinRequests: JoinRequest[];
