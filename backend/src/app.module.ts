@@ -5,6 +5,9 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { NotificationsModule } from './notifications/notifications.module'; // ✅ FIXED NAME
 import { ProjectModule } from './project/project.module';
+import { WhiteboardModule } from './whiteboard/whiteboard.module';
+import { WhiteboardGateway } from './whiteboard/whiteboard.gateway';
+//import { WhiteboardGateway } from './whiteboard/whiteboard.gateway';
 
 @Module({
   imports: [
@@ -14,6 +17,8 @@ import { ProjectModule } from './project/project.module';
     UsersModule,
     NotificationsModule, // ✅ FIXED NAME
     ProjectModule,
+    WhiteboardModule ,
   ],
+  providers:[WhiteboardGateway],
 })
 export class AppModule {}

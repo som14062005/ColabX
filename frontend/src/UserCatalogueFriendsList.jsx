@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from "react";
 import { X, User, UserPlus, UserCheck, Bell } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import profileImg from "./assets/profile.png";
 
 const csSkills = [
   "React","JavaScript","HTML","CSS","Node.js","Python","Java","C++","C#",
@@ -245,52 +246,81 @@ export default function UserCatalogueFriendsList() {
   return (
     <div className="min-h-screen w-full flex flex-col" style={{ backgroundColor: '#0D0D0D', color: '#FFFFFF' }}>
       {/* Navbar with Notifications */}
-      <nav className="flex items-center justify-between px-6 py-4 border-b border-[#222]" style={{ backgroundColor: '#1A1A1A' }}>
-        <h1 className="text-2xl font-bold">
-          <span style={{ color: '#A259FF' }}>Colab</span><span style={{ color: '#FFFFFF' }}>X</span>
-        </h1>
-        <div className="relative flex items-center gap-4">
-          <div className="relative">
+      {/* Navbar */}
+<header className="flex items-center justify-between p-4 border-b border-gray-800">
+  <h1
+    className="text-2xl font-bold cursor-pointer"
+    onClick={() => navigate("/")}
+  >
+    <span style={{ color: "#A259FF" }}>Colab</span>
+    <span style={{ color: "#FFFFFF" }}>X</span>
+  </h1>
+
+  {/* Right side - notifications + profile side-by-side */}
+  <div className="flex items-center gap-4">
+    <div className="relative">
+      <button
+        className="relative p-2 rounded-md hover:bg-[#2A2A2A] transition"
+        onClick={() => setShowNotifications((s) => !s)}
+        aria-label="Notifications"
+      >
+        <Bell size={22} className="text-white" />
+        {notifications.length > 0 && (
+          <span className="absolute -top-1 -right-1 bg-red-500 text-xs text-white rounded-full px-2">
+            {notifications.length}
+          </span>
+        )}
+      </button>
+      {showNotifications && (
+        <div className="absolute right-0 mt-2 w-80 bg-[#1A1A1A] border border-[#333] rounded-lg shadow-lg z-50">
+          <div className="p-3 border-b border-[#333] flex items-center justify-between">
+            <strong>Notifications</strong>
             <button
-              className="relative p-2 rounded-md hover:bg-[#2A2A2A] transition"
-              onClick={() => setShowNotifications((s) => !s)}
-              aria-label="Notifications"
+              className="text-xs text-[#B3B3B3] hover:underline"
+              onClick={() => navigate("/notifications")}
             >
-              <Bell size={22} className="text-white" />
-              {notifications.length > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-xs text-white rounded-full px-2">
-                  {notifications.length}
-                </span>
-              )}
+              View all
             </button>
-            {showNotifications && (
-              <div className="absolute right-0 mt-2 w-80 bg-[#1A1A1A] border border-[#333] rounded-lg shadow-lg z-50">
-                <div className="p-3 border-b border-[#333] flex items-center justify-between">
-                  <strong>Notifications</strong>
-                  <button className="text-xs text-[#B3B3B3] hover:underline" onClick={() => navigate("/notifications")}>
-                    View all
-                  </button>
+          </div>
+          <div style={{ maxHeight: 300, overflowY: "auto" }}>
+            {notifications.length === 0 ? (
+              <p className="p-3 text-sm text-[#B3B3B3]">No new requests</p>
+            ) : (
+              notifications.map((n) => (
+                <div key={n._id} className="p-3 border-b border-[#333]">
+                  <p className="text-sm mb-2">{n.message}</p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleAcceptRequest(n._id)}
+                      className="px-3 py-1 bg-green-500 text-white rounded text-xs"
+                    >
+                      Accept
+                    </button>
+                    <button
+                      onClick={() => handleRejectRequest(n._id)}
+                      className="px-3 py-1 bg-red-500 text-white rounded text-xs"
+                    >
+                      Reject
+                    </button>
+                  </div>
                 </div>
-                <div style={{ maxHeight: 300, overflowY: "auto" }}>
-                  {notifications.length === 0 ? (
-                    <p className="p-3 text-sm text-[#B3B3B3]">No new requests</p>
-                  ) : (
-                    notifications.map((n) => (
-                      <div key={n._id} className="p-3 border-b border-[#333]">
-                        <p className="text-sm mb-2">{n.message}</p>
-                        <div className="flex gap-2">
-                          <button onClick={() => handleAcceptRequest(n._id)} className="px-3 py-1 bg-green-500 text-white rounded text-xs">Accept</button>
-                          <button onClick={() => handleRejectRequest(n._id)} className="px-3 py-1 bg-red-500 text-white rounded text-xs">Reject</button>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
+              ))
             )}
           </div>
         </div>
-      </nav>
+      )}
+    </div>
+
+    {/* Profile image beside notifications */}
+    <img
+      src={profileImg}
+      alt="User Avatar"
+      className="w-10 h-10 rounded-full cursor-pointer"
+      onClick={() => navigate("/profile")}
+    />
+  </div>
+</header>
+
 
       {/* Main Content */}
       <div className="flex justify-center items-start py-12 px-4 flex-1">

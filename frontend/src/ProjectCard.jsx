@@ -1,50 +1,134 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Select from "react-select";
-import UserProfile from './Profile'; // Make sure this path is correct
+import { useNavigate } from "react-router-dom";
 
-// Dummy user list for inviting members
-const dummyUsers = [
-  { 
-    id: 1, 
-    username: "alice",
-    displayName: "Alice Johnson",
-    email: "alice@example.com",
-    skills: ["React", "JavaScript", "CSS"],
-    experience: "2 years",
-    bio: "Frontend developer passionate about creating beautiful user interfaces",
-    avatar: "https://i.pravatar.cc/150?img=1"
+// API Service
+const apiService = {
+  baseUrl: 'http://localhost:3000',
+  
+  async request(endpoint, options = {}) {
+    const token = sessionStorage.getItem('token');
+    
+    const config = {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { 'Authorization': `Bearer ${token}` }),
+        ...options.headers,
+      },
+      ...options,
+    };
+
+    const response = await fetch(`${this.baseUrl}${endpoint}`, config);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`${response.status}: ${errorText}`);
+    }
+    
+    return response.json();
   },
-  { 
-    id: 2, 
-    username: "bob",
-    displayName: "Bob Smith",
-    email: "bob@example.com",
-    skills: ["Node.js", "Python", "MongoDB"],
-    experience: "3 years",
-    bio: "Full-stack developer with expertise in backend technologies",
-    avatar: "https://i.pravatar.cc/150?img=2"
+
+  // Project APIs
+  async getMyProjects() {
+    return this.request('/projects/my');
   },
-  { 
-    id: 3, 
-    username: "charlie",
-    displayName: "Charlie Brown",
-    email: "charlie@example.com",
-    skills: ["Python", "Machine Learning", "Data Science"],
-    experience: "4 years",
-    bio: "Data scientist and ML engineer building intelligent systems",
-    avatar: "https://i.pravatar.cc/150?img=3"
+
+  async getAvailableProjects() {
+    return this.request('/projects/available-to-join');
   },
-  { 
-    id: 4, 
-    username: "david",
-    displayName: "David Wilson",
-    email: "david@example.com",
-    skills: ["React", "Node.js", "MongoDB", "AWS"],
-    experience: "5 years",
-    bio: "Senior developer with cloud architecture experience",
-    avatar: "https://i.pravatar.cc/150?img=4"
+
+  async createProject(projectData) {
+    return this.request('/projects', {
+      method: 'POST',
+      body: JSON.stringify(projectData),
+    });
   },
-];
+
+  // Join Request APIs
+  async sendJoinRequest(projectId) {
+    return this.request(`/projects/${projectId}/join-request`, {
+      method: 'POST',
+    });
+  },
+
+  async getJoinRequests(projectId) {
+    return this.request(`/projects/${projectId}/join-requests`);
+  },
+
+  async acceptJoinRequest(projectId, requestUserId) {
+    return this.request(`/projects/${projectId}/join-requests/${requestUserId}/accept`, {
+      method: 'POST',
+    });
+  },
+
+  async rejectJoinRequest(projectId, requestUserId) {
+    return this.request(`/projects/${projectId}/join-requests/${requestUserId}/reject`, {
+      method: 'POST',
+    });
+  }
+};
+
+// Data transformers
+const transformProject = (backendProject, currentUserId) => ({
+  id: backendProject._id,
+  _id: backendProject._id,
+  name: backendProject.name,
+  title: backendProject.name,
+  description: backendProject.description,
+  status: backendProject.owner === currentUserId ? "Owned" : "Available",
+  updated: formatDate(backendProject.updatedAt),
+  githubLink: backendProject.githubLink || '',
+  techStack: backendProject.techStack || [],
+  requirements: backendProject.requirements || 'No requirements specified',
+  difficulty: backendProject.difficulty || 'Not specified',
+  members: backendProject.members || [],
+  joinRequests: backendProject.joinRequests || [],
+  isOwned: backendProject.owner === currentUserId,
+  owner: backendProject.owner,
+});
+
+const transformJoinRequest = (request) => ({
+  id: request._id || request.id,
+  userId: request.user._id || request.user.id,
+  user: {
+    id: request.user._id || request.user.id,
+    username: request.user.username,
+    displayName: request.user.displayName || request.user.username,
+    email: request.user.email,
+    skills: request.user.skills || [],
+    experience: request.user.experience || 'Not specified',
+    bio: request.user.bio || 'No bio available',
+    avatar: request.user.avatar || `https://i.pravatar.cc/150?u=${request.user._id || request.user.id}`,
+  },
+  projectId: request.project || request.projectId,
+  projectTitle: request.projectTitle || 'Unknown Project',
+  status: request.status || 'pending',
+  createdAt: request.createdAt,
+  timestamp: request.createdAt,
+});
+
+const formatDate = (dateString) => {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffTime = Math.abs(now - date);
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  
+  if (diffDays === 1) return "1 day ago";
+  if (diffDays < 7) return `${diffDays} days ago`;
+  if (diffDays < 30) return `${Math.ceil(diffDays / 7)} weeks ago`;
+  return date.toLocaleDateString();
+};
+
+const getCurrentUserId = () => {
+  try {
+    const token = sessionStorage.getItem('token');
+    if (!token) return null;
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return payload.sub || payload.userId || payload.id;
+  } catch {
+    return null;
+  }
+};
 
 const techOptions = [
   { value: "React", label: "React" },
@@ -58,11 +142,124 @@ const techOptions = [
 const difficultyOptions = [
   { value: "Easy", label: "Easy" },
   { value: "Medium", label: "Medium" },
+  { value: "Intermediate", label: "Intermediate" },
   { value: "Hard", label: "Hard" },
+  { value: "Beginner", label: "Beginner" },
+  { value: "Advanced", label: "Advanced" },
 ];
 
-// Notifications Modal Component
-function NotificationsModal({ notifications, onClose, onAccept, onReject, onViewProfile }) {
+// User Profile Component
+function UserProfile({ userData, onBack, isOwnProfile }) {
+  return (
+    <div style={{ backgroundColor: "#0b0b0f", color: "white", minHeight: "100vh", padding: "2rem" }}>
+      <button 
+        onClick={onBack}
+        style={{
+          backgroundColor: "#a259ff",
+          border: "none",
+          padding: "0.5rem 1rem",
+          borderRadius: "6px",
+          color: "white",
+          cursor: "pointer",
+          marginBottom: "2rem"
+        }}
+      >
+        ← Back
+      </button>
+      
+      <div style={{ maxWidth: "600px", margin: "0 auto" }}>
+        <img 
+          src={userData.avatar} 
+          alt={userData.displayName}
+          style={{
+            width: "150px",
+            height: "150px",
+            borderRadius: "50%",
+            marginBottom: "1rem"
+          }}
+        />
+        <h1 style={{ color: "#a259ff" }}>{userData.displayName}</h1>
+        <p style={{ color: "#888" }}>@{userData.username}</p>
+        <p>{userData.bio}</p>
+        
+        <div style={{ marginTop: "2rem" }}>
+          <h3 style={{ color: "#a259ff" }}>Skills</h3>
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+            {userData.skills.map((skill, idx) => (
+              <span
+                key={idx}
+                style={{
+                  background: "#2c2c34",
+                  padding: "4px 8px",
+                  borderRadius: 4,
+                  fontSize: 12,
+                  color: "#ddd",
+                }}
+              >
+                {skill}
+              </span>
+            ))}
+          </div>
+        </div>
+        
+        <div style={{ marginTop: "1rem" }}>
+          <p><strong>Experience:</strong> {userData.experience}</p>
+          <p><strong>Email:</strong> {userData.email}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Join Requests Management Modal
+function JoinRequestsModal({ projectId, isOpen, onClose, onUpdate }) {
+  const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const fetchJoinRequests = useCallback(async () => {
+    if (!projectId) return;
+    
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await apiService.getJoinRequests(projectId);
+      setRequests(data.map(transformJoinRequest));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    if (isOpen && projectId) {
+      fetchJoinRequests();
+    }
+  }, [isOpen, projectId, fetchJoinRequests]);
+
+  const handleAccept = async (requestUserId) => {
+    try {
+      await apiService.acceptJoinRequest(projectId, requestUserId);
+      await fetchJoinRequests(); // Refresh requests
+      onUpdate?.(); // Notify parent to refresh projects
+    } catch (err) {
+      alert(`Error accepting request: ${err.message}`);
+    }
+  };
+
+  const handleReject = async (requestUserId) => {
+    try {
+      await apiService.rejectJoinRequest(projectId, requestUserId);
+      await fetchJoinRequests(); // Refresh requests
+      onUpdate?.(); // Notify parent to refresh projects
+    } catch (err) {
+      alert(`Error rejecting request: ${err.message}`);
+    }
+  };
+
+  if (!isOpen) return null;
+
   return (
     <div
       style={{
@@ -88,7 +285,6 @@ function NotificationsModal({ notifications, onClose, onAccept, onReject, onView
           border: "1px solid #2e2e35",
         }}
       >
-        {/* Header */}
         <div
           style={{
             padding: "24px",
@@ -99,7 +295,7 @@ function NotificationsModal({ notifications, onClose, onAccept, onReject, onView
           }}
         >
           <h2 style={{ margin: 0, color: "#a259ff", fontSize: 20, fontWeight: 700 }}>
-            Join Requests ({notifications.length})
+            Join Requests ({requests.length})
           </h2>
           <button
             onClick={onClose}
@@ -116,17 +312,30 @@ function NotificationsModal({ notifications, onClose, onAccept, onReject, onView
           </button>
         </div>
 
-        {/* Content */}
         <div style={{ padding: 24 }}>
-          {notifications.length === 0 ? (
+          {loading && (
+            <div style={{ textAlign: "center", color: "#a259ff", padding: "2rem" }}>
+              Loading requests...
+            </div>
+          )}
+
+          {error && (
+            <div style={{ textAlign: "center", color: "#ef4444", padding: "2rem" }}>
+              Error: {error}
+            </div>
+          )}
+
+          {!loading && !error && requests.length === 0 && (
             <div style={{ textAlign: "center", color: "#888", padding: "2rem" }}>
               No join requests at the moment
             </div>
-          ) : (
+          )}
+
+          {!loading && !error && requests.length > 0 && (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              {notifications.map((notification, idx) => (
+              {requests.map((request) => (
                 <div
-                  key={idx}
+                  key={request.id}
                   style={{
                     background: "#16161a",
                     border: "1px solid #2c2c34",
@@ -136,8 +345,8 @@ function NotificationsModal({ notifications, onClose, onAccept, onReject, onView
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
                     <img
-                      src={notification.user.avatar}
-                      alt={notification.user.displayName}
+                      src={request.user.avatar}
+                      alt={request.user.displayName}
                       style={{
                         width: 40,
                         height: 40,
@@ -147,53 +356,50 @@ function NotificationsModal({ notifications, onClose, onAccept, onReject, onView
                     />
                     <div style={{ flex: 1 }}>
                       <div
-                        onClick={() => onViewProfile(notification.user)}
                         style={{
                           color: "#a259ff",
                           fontWeight: 600,
-                          cursor: "pointer",
                           fontSize: 14,
-                          textDecoration: "underline",
                         }}
                       >
-                        {notification.user.displayName} (@{notification.user.username})
+                        {request.user.displayName} (@{request.user.username})
                       </div>
                       <div style={{ color: "#888", fontSize: 12 }}>
-                        wants to join "{notification.projectTitle}"
+                        {request.user.email}
                       </div>
                     </div>
                   </div>
 
-                  {/* User Skills Preview */}
-                  <div style={{ marginBottom: 12 }}>
-                    <div style={{ fontSize: 12, color: "#a259ff", marginBottom: 4 }}>Skills:</div>
-                    <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                      {notification.user.skills.slice(0, 3).map((skill, skillIdx) => (
-                        <span
-                          key={skillIdx}
-                          style={{
-                            background: "#2c2c34",
-                            padding: "2px 6px",
-                            borderRadius: 4,
-                            fontSize: 10,
-                            color: "#ddd",
-                          }}
-                        >
-                          {skill}
-                        </span>
-                      ))}
-                      {notification.user.skills.length > 3 && (
-                        <span style={{ fontSize: 10, color: "#888" }}>
-                          +{notification.user.skills.length - 3} more
-                        </span>
-                      )}
+                  {request.user.skills.length > 0 && (
+                    <div style={{ marginBottom: 12 }}>
+                      <div style={{ fontSize: 12, color: "#a259ff", marginBottom: 4 }}>Skills:</div>
+                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                        {request.user.skills.slice(0, 3).map((skill, skillIdx) => (
+                          <span
+                            key={skillIdx}
+                            style={{
+                              background: "#2c2c34",
+                              padding: "2px 6px",
+                              borderRadius: 4,
+                              fontSize: 10,
+                              color: "#ddd",
+                            }}
+                          >
+                            {skill}
+                          </span>
+                        ))}
+                        {request.user.skills.length > 3 && (
+                          <span style={{ fontSize: 10, color: "#888" }}>
+                            +{request.user.skills.length - 3} more
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
 
-                  {/* Action Buttons */}
                   <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
                     <button
-                      onClick={() => onReject(notification.id)}
+                      onClick={() => handleReject(request.userId)}
                       style={{
                         background: "#ef4444",
                         border: "none",
@@ -208,7 +414,7 @@ function NotificationsModal({ notifications, onClose, onAccept, onReject, onView
                       Reject
                     </button>
                     <button
-                      onClick={() => onAccept(notification.id)}
+                      onClick={() => handleAccept(request.userId)}
                       style={{
                         background: "#22c55e",
                         border: "none",
@@ -234,10 +440,12 @@ function NotificationsModal({ notifications, onClose, onAccept, onReject, onView
 }
 
 // Project Detail Modal Component
-function ProjectDetailModal({ project, onClose, onJoinRequest, hasRequested }) {
+function ProjectDetailModal({ project, onClose, onJoinRequest, hasRequested, isRequestingJoin }) {
+  const navigate = useNavigate();
+
   const getDifficultyColor = (difficulty) => {
-    if (difficulty === "Hard") return "#ef4444";
-    if (difficulty === "Medium") return "#eab308";
+    if (difficulty === "Hard" || difficulty === "Advanced") return "#ef4444";
+    if (difficulty === "Medium" || difficulty === "Intermediate") return "#eab308";
     return "#22c55e";
   };
 
@@ -266,7 +474,7 @@ function ProjectDetailModal({ project, onClose, onJoinRequest, hasRequested }) {
           border: "1px solid #2e2e35",
         }}
       >
-        {/* Header */}
+        {/* HEADER */}
         <div
           style={{
             padding: "24px",
@@ -278,7 +486,7 @@ function ProjectDetailModal({ project, onClose, onJoinRequest, hasRequested }) {
         >
           <div style={{ flex: 1 }}>
             <h2 style={{ margin: 0, color: "#a259ff", fontSize: 24, fontWeight: 700 }}>
-              {project.title}
+              {project.name || project.title}
             </h2>
             <div style={{ marginTop: 12, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
               <span
@@ -292,9 +500,6 @@ function ProjectDetailModal({ project, onClose, onJoinRequest, hasRequested }) {
                 }}
               >
                 {project.difficulty}
-              </span>
-              <span style={{ color: "#888", fontSize: 14 }}>
-                Status: {project.status}
               </span>
               <span style={{ color: "#888", fontSize: 14 }}>
                 Updated: {project.updated}
@@ -316,9 +521,8 @@ function ProjectDetailModal({ project, onClose, onJoinRequest, hasRequested }) {
           </button>
         </div>
 
-        {/* Content */}
+        {/* BODY */}
         <div style={{ padding: 24 }}>
-          {/* Description */}
           <div style={{ marginBottom: 24 }}>
             <h4 style={{ color: "#a259ff", marginBottom: 8, fontSize: 16 }}>Description</h4>
             <p style={{ color: "#ddd", lineHeight: 1.6, margin: 0, fontSize: 14 }}>
@@ -326,7 +530,6 @@ function ProjectDetailModal({ project, onClose, onJoinRequest, hasRequested }) {
             </p>
           </div>
 
-          {/* Tech Stack */}
           <div style={{ marginBottom: 24 }}>
             <h4 style={{ color: "#a259ff", marginBottom: 8, fontSize: 16 }}>Tech Stack</h4>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -348,7 +551,6 @@ function ProjectDetailModal({ project, onClose, onJoinRequest, hasRequested }) {
             </div>
           </div>
 
-          {/* Requirements */}
           <div style={{ marginBottom: 24 }}>
             <h4 style={{ color: "#a259ff", marginBottom: 8, fontSize: 16 }}>Requirements</h4>
             <p style={{ color: "#ddd", margin: 0, fontSize: 14 }}>
@@ -356,36 +558,38 @@ function ProjectDetailModal({ project, onClose, onJoinRequest, hasRequested }) {
             </p>
           </div>
 
-          {/* Current Members */}
           <div style={{ marginBottom: 24 }}>
             <h4 style={{ color: "#a259ff", marginBottom: 8, fontSize: 16 }}>
-              Current Members ({project.members.length})
+              Current Members ({project.members ? project.members.length : 0})
             </h4>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {project.members.map((member, idx) => (
-                <span
-                  key={idx}
-                  style={{
-                    background: "#16161a",
-                    padding: "6px 12px",
-                    borderRadius: 6,
-                    fontSize: 12,
-                    color: "#ddd",
-                    border: "1px solid #2c2c34",
-                  }}
-                >
-                  @{member}
-                </span>
-              ))}
+              {project.members && project.members.length > 0 ? (
+                project.members.map((member, idx) => (
+                  <span
+                    key={idx}
+                    style={{
+                      background: "#16161a",
+                      padding: "6px 12px",
+                      borderRadius: 6,
+                      fontSize: 12,
+                      color: "#ddd",
+                      border: "1px solid #2c2c34",
+                    }}
+                  >
+                    @{member}
+                  </span>
+                ))
+              ) : (
+                <span style={{ color: "#888", fontSize: 14 }}>No members yet</span>
+              )}
             </div>
           </div>
 
-          {/* GitHub Link */}
-          {project.github && (
+          {(project.github || project.githubLink) && (
             <div style={{ marginBottom: 24 }}>
               <h4 style={{ color: "#a259ff", marginBottom: 8, fontSize: 16 }}>Repository</h4>
               <a
-                href={project.github}
+                href={project.github || project.githubLink}
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{
@@ -400,7 +604,7 @@ function ProjectDetailModal({ project, onClose, onJoinRequest, hasRequested }) {
           )}
         </div>
 
-        {/* Action Buttons */}
+        {/* FOOTER */}
         <div
           style={{
             padding: "16px 24px",
@@ -425,236 +629,273 @@ function ProjectDetailModal({ project, onClose, onJoinRequest, hasRequested }) {
             Close
           </button>
           <button
-            onClick={() => onJoinRequest(project.id)}
-            disabled={hasRequested}
+            onClick={() => onJoinRequest(project._id || project.id)}
+            disabled={hasRequested || isRequestingJoin}
             style={{
-              background: hasRequested ? "#444" : "#a259ff",
+              background: hasRequested ? "#444" : isRequestingJoin ? "#666" : "#a259ff",
               border: "none",
               padding: "10px 20px",
               borderRadius: 8,
               color: "white",
-              cursor: hasRequested ? "not-allowed" : "pointer",
+              cursor: (hasRequested || isRequestingJoin) ? "not-allowed" : "pointer",
               fontWeight: 600,
               fontSize: 14,
             }}
           >
-            {hasRequested ? "Request Sent" : "Request to Join"}
+            {isRequestingJoin ? "Sending..." : hasRequested ? "Request Sent" : "Request to Join"}
+          </button>
+
+          {/* NEW BLINKING GO TO PROJECT BUTTON */}
+          <button
+            onClick={() => navigate(`/projects/${project._id || project.id}`)}
+            style={{
+              background: "#ff9800",
+              border: "none",
+              padding: "10px 20px",
+              borderRadius: 8,
+              color: "#fff",
+              cursor: "pointer",
+              fontWeight: 700,
+              fontSize: 14,
+              animation: "blinker 1s linear infinite",
+            }}
+          >
+            🚀 Go To Project
           </button>
         </div>
       </div>
+
+      {/* Blinking keyframes */}
+      <style>
+        {`
+          @keyframes blinker {
+            50% { opacity: 0.5; }
+          }
+        `}
+      </style>
     </div>
   );
 }
 
 export default function ProjectCard() {
+  const navigate = useNavigate();
+  
   const [activeTab, setActiveTab] = useState("Projects");
-  const [requestedMembers, setRequestedMembers] = useState([]);
-  const [joinRequests, setJoinRequests] = useState([]);
   const [selectedProject, setSelectedProject] = useState(null);
   const [searchProjects, setSearchProjects] = useState("");
   const [techFilter, setTechFilter] = useState([]);
-  const [showNotifications, setShowNotifications] = useState(false);
+  const [isRequestingJoin, setIsRequestingJoin] = useState(false);
+  const [joinRequestModalProject, setJoinRequestModalProject] = useState(null);
   
-  // Navigation state - THIS IS THE KEY PART
-  const [currentView, setCurrentView] = useState('main'); // 'main' or 'profile'
+  // Navigation state
+  const [currentView, setCurrentView] = useState('main');
   const [viewingUserProfile, setViewingUserProfile] = useState(null);
 
-  // Mock notifications for demonstration
-  const [notifications, setNotifications] = useState([
-    {
-      id: 1,
-      user: dummyUsers[0], // alice
-      projectId: 1,
-      projectTitle: "E-Commerce Platform",
-      timestamp: new Date().toISOString(),
-    },
-    {
-      id: 2,
-      user: dummyUsers[1], // bob
-      projectId: 3,
-      projectTitle: "IoT Device Manager",
-      timestamp: new Date().toISOString(),
-    },
-  ]);
+  // Projects state
+  const [projects, setProjects] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const [projects, setProjects] = useState([
-    {
-      id: 1,
-      title: "E-Commerce Platform",
-      description: "A comprehensive full-stack e-commerce solution built with React and Node.js. Features include user authentication, product catalog, shopping cart, payment integration, order management, and admin dashboard. Perfect for learning modern web development patterns and building scalable applications.",
-      status: "Active",
-      updated: "2 hours ago",
-      github: "https://github.com/example/ecommerce",
-      techStack: ["React", "Node.js"],
-      requirements: "Basic JavaScript knowledge, familiarity with React hooks, understanding of REST APIs",
-      difficulty: "Medium",
-      members: ["alice"],
-    },
-    {
-      id: 2,
-      title: "AI Content Generator",
-      description: "Machine learning powered content generation tool that uses natural language processing to create articles, social media posts, and marketing copy. Includes sentiment analysis, content optimization, and integration with popular CMS platforms.",
-      status: "Completed",
-      updated: "3 days ago",
-      github: "https://github.com/example/aicontent",
-      techStack: ["Python", "Flask"],
-      requirements: "Machine learning basics, Python programming, understanding of NLP concepts",
-      difficulty: "Hard",
-      members: ["bob", "charlie"],
-    },
-    {
-      id: 3,
-      title: "IoT Device Manager",
-      description: "Comprehensive platform for monitoring and managing IoT devices in real-time. Features include device registration, data visualization, alert systems, remote control capabilities, and analytics dashboard for performance metrics.",
-      status: "Active",
-      updated: "12 hours ago",
-      github: "https://github.com/example/iot",
-      techStack: ["NestJS", "MongoDB"],
-      requirements: "IoT concepts, database design, real-time communication protocols",
-      difficulty: "Medium",
-      members: ["david"],
-    },
-    {
-      id: 4,
-      title: "Collaborative Code Editor",
-      description: "Real-time collaborative code editor with syntax highlighting, version control integration, live chat, and pair programming features. Built for remote development teams and coding interviews.",
-      status: "Active",
-      updated: "1 day ago",
-      github: "https://github.com/example/codeeditor",
-      techStack: ["React", "Node.js", "MongoDB"],
-      requirements: "WebSocket knowledge, React experience, understanding of collaborative algorithms",
-      difficulty: "Hard",
-      members: ["alice", "bob"],
-    },
-  ]);
+  // Available projects state
+  const [availableProjects, setAvailableProjects] = useState([]);
+  const [loadingAvailable, setLoadingAvailable] = useState(false);
+  const [errorAvailable, setErrorAvailable] = useState(null);
+
+  // Join requests tracking
+  const [sentJoinRequests, setSentJoinRequests] = useState(new Set());
+
+  const currentUserId = getCurrentUserId();
 
   const [form, setForm] = useState({
-    title: "",
+    name: "",
     description: "",
-    github: "",
+    githubLink: "",
     techStack: [],
     requirements: "",
     difficulty: "",
     members: [],
   });
 
-  const [searchUser, setSearchUser] = useState("");
+  // Fetch projects from backend
+  const fetchProjects = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const data = await apiService.getMyProjects();
+      
+      const transformedProjects = [];
+      
+      if (data.owned) {
+        data.owned.forEach(project => {
+          transformedProjects.push(transformProject(project, currentUserId));
+        });
+      }
+
+      if (data.joined) {
+        data.joined.forEach(project => {
+          transformedProjects.push({
+            ...transformProject(project, currentUserId),
+            status: "Joined",
+            isOwned: false,
+          });
+        });
+      }
+
+      setProjects(transformedProjects);
+    } catch (err) {
+      console.error("Error fetching projects:", err);
+      setError(err.message);
+      setProjects([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [currentUserId]);
+
+  // Fetch available projects
+  const fetchAvailableProjects = useCallback(async () => {
+    try {
+      setLoadingAvailable(true);
+      setErrorAvailable(null);
+      
+      const data = await apiService.getAvailableProjects();
+      
+      const transformedProjects = data.map(project => ({
+        ...transformProject(project, currentUserId),
+        status: "Available",
+      }));
+
+      setAvailableProjects(transformedProjects);
+    } catch (err) {
+      console.error("Error fetching available projects:", err);
+      setErrorAvailable(err.message);
+      setAvailableProjects([]);
+    } finally {
+      setLoadingAvailable(false);
+    }
+  }, [currentUserId]);
+
+  useEffect(() => {
+    fetchProjects();
+  }, [fetchProjects]);
+
+  useEffect(() => {
+    if (activeTab === "Join Requests") {
+      fetchAvailableProjects();
+    }
+  }, [activeTab, fetchAvailableProjects]);
 
   const handleInputChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  const handleAddMember = (username) => {
-    if (!form.members.includes(username)) {
-      setForm({ ...form, members: [...form.members, username] });
-      setRequestedMembers([...requestedMembers, username]);
-    }
-  };
+  const handleJoinRequest = async (projectId) => {
+    if (sentJoinRequests.has(projectId) || isRequestingJoin) return;
 
-  const handleJoinRequest = (projectId) => {
-    if (!joinRequests.includes(projectId)) {
-      setJoinRequests([...joinRequests, projectId]);
+    try {
+      setIsRequestingJoin(true);
       
-      // Add to notifications (simulate request from current user to project lead)
-      const project = projects.find(p => p.id === projectId);
-      const newNotification = {
-        id: notifications.length + 1,
-        user: dummyUsers[2], // charlie as example current user
-        projectId: projectId,
-        projectTitle: project.title,
-        timestamp: new Date().toISOString(),
-      };
-      setNotifications([...notifications, newNotification]);
-    }
-    setSelectedProject(null);
-  };
-
-  const handleAcceptRequest = (notificationId) => {
-    const notification = notifications.find(n => n.id === notificationId);
-    if (notification) {
-      // Add user to project members
-      setProjects(prev => prev.map(project => 
-        project.id === notification.projectId 
-          ? { ...project, members: [...project.members, notification.user.username] }
-          : project
-      ));
+      await apiService.sendJoinRequest(projectId);
       
-      // Remove notification
-      setNotifications(prev => prev.filter(n => n.id !== notificationId));
+      setSentJoinRequests(prev => new Set([...prev, projectId]));
+      setSelectedProject(null);
+      
+      alert("Join request sent successfully!");
+
+    } catch (err) {
+      console.error("Error sending join request:", err);
+      alert(`Error sending join request: ${err.message}`);
+    } finally {
+      setIsRequestingJoin(false);
     }
   };
 
-  const handleRejectRequest = (notificationId) => {
-    setNotifications(prev => prev.filter(n => n.id !== notificationId));
-  };
-
-  // CRITICAL NAVIGATION FUNCTIONS - FIXED
   const handleViewUserProfile = (user) => {
-    console.log('🔥 Navigating to profile for user:', user);
     setViewingUserProfile(user);
     setCurrentView('profile');
-    setShowNotifications(false);
   };
 
   const handleBackToMain = () => {
-    console.log('🔥 Navigating back to main');
     setCurrentView('main');
     setViewingUserProfile(null);
   };
 
-  const handleSubmit = () => {
-    const newProject = {
-      id: projects.length + 1,
-      title: form.title,
-      description: form.description,
-      status: "Active",
-      updated: "Just now",
-      github: form.github,
-      techStack: form.techStack.map((t) => t.value),
-      requirements: form.requirements,
-      difficulty: form.difficulty.value,
-      members: form.members,
-    };
-
-    setProjects([...projects, newProject]);
-    setActiveTab("Projects");
-    setForm({
-      title: "",
-      description: "",
-      github: "",
-      techStack: [],
-      requirements: "",
-      difficulty: "",
-      members: [],
-    });
-    setRequestedMembers([]);
+  // Handle profile navigation
+  const handleProfileClick = () => {
+    navigate('/profile');
   };
 
-  // Filter projects for Join Requests tab
-  const filteredProjects = projects.filter((project) => {
-    const matchesSearch = 
-      project.title.toLowerCase().includes(searchProjects.toLowerCase()) ||
-      project.description.toLowerCase().includes(searchProjects.toLowerCase());
-    
-    const matchesTech = 
+  const handleSubmit = async () => {
+    if (!form.name.trim()) {
+      alert("Please enter a project name.");
+      return;
+    }
+    if (!form.description.trim()) {
+      alert("Please enter a project description.");
+      return;
+    }
+    if (!form.difficulty) {
+      alert("Please select a difficulty level.");
+      return;
+    }
+
+    const payload = {
+      name: form.name.trim(),
+      description: form.description.trim(),
+      githubLink: form.githubLink.trim(),
+      techStack: form.techStack.map(t => t.value),
+      requirements: form.requirements.trim(),
+      difficulty: typeof form.difficulty === 'object' ? form.difficulty.value : form.difficulty,
+    };
+
+    try {
+      await apiService.createProject(payload);
+      
+      await fetchProjects();
+      setActiveTab("Projects");
+
+      setForm({
+        name: "",
+        description: "",
+        githubLink: "",
+        techStack: [],
+        requirements: "",
+        difficulty: "",
+        members: [],
+      });
+      
+      alert("Project created successfully!");
+
+    } catch (err) {
+      console.error("Error creating project:", err);
+      alert(`Error creating project: ${err.message}`);
+    }
+  };
+
+  const filteredAvailableProjects = availableProjects.filter((project) => {
+    const projectName = project.name || project.title || "";
+    const projectDescription = project.description || "";
+    const searchTerm = (searchProjects || "").toLowerCase();
+
+    const matchesSearch =
+      projectName.toLowerCase().includes(searchTerm) ||
+      projectDescription.toLowerCase().includes(searchTerm);
+
+    const matchesTech =
       techFilter.length === 0 ||
-      techFilter.some(tech => project.techStack.includes(tech.value));
-    
+      techFilter.some(tech => project.techStack?.includes(tech.value));
+
     return matchesSearch && matchesTech;
   });
 
   const getDifficultyColor = (difficulty) => {
-    if (difficulty === "Hard") return "#ef4444";
-    if (difficulty === "Medium") return "#eab308";
+    if (difficulty === "Hard" || difficulty === "Advanced") return "#ef4444";
+    if (difficulty === "Medium" || difficulty === "Intermediate") return "#eab308";
     return "#22c55e";
   };
 
-  // MAIN RENDER LOGIC - THIS IS THE KEY PART THAT WAS MISSING
-  console.log('🔥 Current view:', currentView);
-  
   // Render profile view
   if (currentView === 'profile') {
-    console.log('🔥 Rendering UserProfile with data:', viewingUserProfile);
     return (
       <UserProfile 
         userData={viewingUserProfile}
@@ -662,12 +903,11 @@ export default function ProjectCard() {
         isOwnProfile={false}
       />
     );
-  }
+  } 
 
   // Render main view
   return (
     <div style={{ backgroundColor: "#0b0b0f", color: "white", minHeight: "100vh", fontFamily: "Arial, sans-serif" }}>
-      {/* Enhanced Header with CODEX branding and notifications */}
       <div style={{ 
         display: "flex", 
         justifyContent: "space-between", 
@@ -675,7 +915,6 @@ export default function ProjectCard() {
         padding: "1.5rem 2rem", 
         borderBottom: "1px solid #222" 
       }}>
-        {/* CODEX Brand */}
         <div style={{ 
           fontSize: "1.8rem", 
           fontWeight: "700",
@@ -685,8 +924,7 @@ export default function ProjectCard() {
           <span style={{ color: "white" }}>X</span>
         </div>
 
-        {/* Navigation Tabs */}
-        <div style={{ display: "flex", gap: "2rem" }}>
+        <div style={{ display: "flex", gap: "2rem", alignItems: "center" }}>
           {["Host a project", "Projects", "Join Requests"].map((tab) => (
             <div
               key={tab}
@@ -704,89 +942,263 @@ export default function ProjectCard() {
               {tab}
             </div>
           ))}
-        </div>
-
-        {/* Notifications Button */}
-        <div style={{ position: "relative" }}>
-          <button
-            onClick={() => setShowNotifications(true)}
+          
+          {/* Profile Icon */}
+          <div
+            onClick={handleProfileClick}
             style={{
-              background: "transparent",
-              border: "1px solid #3a3a42",
-              borderRadius: "50%",
-              width: "40px",
-              height: "40px",
-              color: "#a259ff",
               cursor: "pointer",
+              padding: "0.5rem",
+              borderRadius: "50%",
+              backgroundColor: "#1e1e26",
+              border: "2px solid #a259ff",
+              transition: "all 0.3s ease",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: "18px",
-              position: "relative",
+              width: "45px",
+              height: "45px",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = "#a259ff";
+              e.currentTarget.style.transform = "scale(1.05)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = "#1e1e26";
+              e.currentTarget.style.transform = "scale(1)";
             }}
           >
-            🔔
-            {notifications.length > 0 && (
-              <span
-                style={{
-                  position: "absolute",
-                  top: -5,
-                  right: -5,
-                  background: "#ef4444",
-                  color: "white",
-                  borderRadius: "50%",
-                  width: "18px",
-                  height: "18px",
-                  fontSize: "10px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontWeight: "bold",
-                }}
-              >
-                {notifications.length}
-              </span>
-            )}
-          </button>
+            <svg
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              style={{ color: "#a259ff" }}
+            >
+              <path
+                d="M12 12C14.7614 12 17 9.76142 17 7C17 4.23858 14.7614 2 12 2C9.23858 2 7 4.23858 7 7C7 9.76142 9.23858 12 12 12Z"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M20.5906 22C20.5906 18.13 16.7406 15 12.0006 15C7.26055 15 3.41055 18.13 3.41055 22"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </div>
         </div>
       </div>
 
       <div style={{ padding: "2rem" }}>
         {activeTab === "Projects" && (
           <>
-            <h2 style={{ fontSize: "2rem", marginBottom: "0.5rem", fontFamily: "monospace" }}><b>PROJECTS</b></h2>
+            <h2 style={{ fontSize: "2rem", marginBottom: "0.5rem", fontFamily: "monospace" }}>
+              <b>PROJECTS</b>
+            </h2>
             <p style={{ marginBottom: "2rem", color: "#aaa" }}>
               Manage and track your development projects
             </p>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "1.5rem" }}>
-              {projects.map((project) => (
-                <div
-                  key={project.id}
+
+            {loading && (
+              <div style={{ 
+                textAlign: "center", 
+                color: "#a259ff", 
+                fontSize: "1.1rem", 
+                marginTop: "3rem" 
+              }}>
+                Loading projects...
+              </div>
+            )}
+
+            {error && (
+              <div style={{ 
+                textAlign: "center", 
+                color: "#ef4444", 
+                fontSize: "1rem", 
+                marginTop: "2rem",
+                padding: "1rem",
+                backgroundColor: "#2a1a1a",
+                borderRadius: "8px",
+                border: "1px solid #ef4444"
+              }}>
+                Error: {error}
+                <br />
+                <button 
+                  onClick={fetchProjects}
                   style={{
-                    backgroundColor: "#16161a",
-                    border: "1px solid #2c2c34",
-                    borderRadius: "10px",
-                    width: "280px",
-                    padding: "1rem",
-                    transition: "box-shadow 0.3s",
-                    cursor: "pointer",
+                    marginTop: "1rem",
+                    backgroundColor: "#a259ff",
+                    border: "none",
+                    padding: "0.5rem 1rem",
+                    borderRadius: "6px",
+                    color: "white",
+                    cursor: "pointer"
                   }}
-                  onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 0 10px #a259ff")}
-                  onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "none")}
                 >
-                  <div style={{ fontWeight: "bold", fontSize: "1rem", marginBottom: "0.5rem", color: "#a259ff" }}>
-                    {project.title}
+                  Retry
+                </button>
+              </div>
+            )}
+
+            {!loading && !error && projects.length === 0 && (
+              <div style={{ 
+                textAlign: "center", 
+                color: "#666", 
+                fontSize: "1.1rem", 
+                marginTop: "3rem" 
+              }}>
+                No projects found. Create your first project!
+              </div>
+            )}
+
+            {!loading && !error && projects.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "1.5rem" }}>
+                {projects.map((project) => (
+                  <div
+                    key={project.id}
+                    style={{
+                      backgroundColor: "#16161a",
+                      border: "1px solid #2c2c34",
+                      borderRadius: "10px",
+                      width: "280px",
+                      padding: "1rem",
+                      transition: "box-shadow 0.3s",
+                      cursor: "pointer",
+                      position: "relative",
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 0 10px #a259ff")}
+                    onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "none")}
+                    onClick={() => setSelectedProject(project)}
+                  >
+                    <div style={{ 
+                      fontWeight: "bold", 
+                      fontSize: "1rem", 
+                      marginBottom: "0.5rem", 
+                      color: "#a259ff" 
+                    }}>
+                      {project.name}
+                    </div>
+
+                    <div style={{ 
+                      fontSize: "0.9rem", 
+                      color: "#ccc", 
+                      marginBottom: "1rem",
+                      lineHeight: "1.4"
+                    }}>
+                      {project.description.length > 100 
+                        ? project.description.substring(0, 100) + "..." 
+                        : project.description
+                      }
+                    </div>
+
+                    <div style={{ 
+                      position: "absolute",
+                      top: "1rem",
+                      right: "1rem"
+                    }}>
+                      <span style={{
+                        backgroundColor: project.isOwned ? "#22c55e" : "#3b82f6",
+                        color: "white",
+                        padding: "2px 8px",
+                        borderRadius: "4px",
+                        fontSize: "0.7rem",
+                        fontWeight: "bold"
+                      }}>
+                        {project.status}
+                      </span>
+                    </div>
+
+                    {project.techStack.length > 0 && (
+                      <div style={{ marginBottom: "0.5rem" }}>
+                        <div style={{ fontSize: "0.75rem", color: "#a259ff", marginBottom: "0.25rem" }}>
+                          Tech Stack:
+                        </div>
+                        <div style={{ display: "flex", gap: "0.25rem", flexWrap: "wrap" }}>
+                          {project.techStack.slice(0, 3).map((tech, idx) => (
+                            <span
+                              key={idx}
+                              style={{
+                                background: "#2c2c34",
+                                padding: "1px 6px",
+                                borderRadius: 3,
+                                fontSize: 10,
+                                color: "#ddd",
+                              }}
+                            >
+                              {tech}
+                            </span>
+                          ))}
+                          {project.techStack.length > 3 && (
+                            <span style={{ fontSize: 10, color: "#888" }}>
+                              +{project.techStack.length - 3}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    <div style={{ fontSize: "0.8rem", color: "#888" }}>
+                      <div>Difficulty: {project.difficulty}</div>
+                      <div>Members: {project.members.length}</div>
+                      <div>Updated: {project.updated}</div>
+                      {project.isOwned && project.joinRequests && (
+                        <div style={{ color: "#a259ff" }}>
+                          Join Requests: {project.joinRequests.length}
+                        </div>
+                      )}
+                    </div>
+
+                    {project.githubLink && (
+                      <div style={{ marginTop: "0.5rem" }}>
+                        <a
+                          href={project.githubLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          style={{
+                            color: "#a259ff",
+                            fontSize: "0.75rem",
+                            textDecoration: "none"
+                          }}
+                        >
+                          🔗 GitHub
+                        </a>
+                      </div>
+                    )}
+
+                    {/* Manage Join Requests Button for Owned Projects */}
+                    {project.isOwned && (
+                      <div style={{ marginTop: "0.5rem" }}>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setJoinRequestModalProject(project);
+                          }}
+                          style={{
+                            backgroundColor: "#a259ff",
+                            border: "none",
+                            padding: "4px 8px",
+                            borderRadius: "4px",
+                            color: "white",
+                            cursor: "pointer",
+                            fontSize: "0.7rem",
+                            fontWeight: "500"
+                          }}
+                        >
+                          Manage Requests ({project.joinRequests?.length || 0})
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  <div style={{ fontSize: "0.9rem", color: "#ccc", marginBottom: "1rem" }}>
-                    {project.description.substring(0, 100)}...
-                  </div>
-                  <div style={{ fontSize: "0.8rem", color: "#888" }}>
-                    <div>Status: {project.status}</div>
-                    <div>Updated: {project.updated}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </>
         )}
 
@@ -819,21 +1231,45 @@ export default function ProjectCard() {
               </h2>
 
               <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-                <input placeholder="Project Name" name="title" value={form.title} onChange={handleInputChange} style={inputStyle} />
-                <textarea placeholder="Project Description" name="description" value={form.description} onChange={handleInputChange} style={inputStyle} />
-                <input placeholder="GitHub Link" name="github" value={form.github} onChange={handleInputChange} style={inputStyle} />
+                <input 
+                  placeholder="Project Name" 
+                  name="name" 
+                  value={form.name} 
+                  onChange={handleInputChange} 
+                  style={inputStyle} 
+                />
+                <textarea 
+                  placeholder="Project Description" 
+                  name="description" 
+                  value={form.description} 
+                  onChange={handleInputChange} 
+                  style={{...inputStyle, minHeight: "80px", resize: "vertical"}} 
+                />
+                <input 
+                  placeholder="GitHub Link (optional)" 
+                  name="githubLink" 
+                  value={form.githubLink} 
+                  onChange={handleInputChange} 
+                  style={inputStyle} 
+                />
 
                 <Select
                   isMulti
                   name="techStack"
                   options={techOptions}
                   value={form.techStack}
-                  onChange={(selected) => setForm({ ...form, techStack: selected })}
+                  onChange={(selected) => setForm({ ...form, techStack: selected || [] })}
                   styles={customSelectStyle}
                   placeholder="Select tech stack..."
                 />
 
-                <input placeholder="Requirements (e.g., prior knowledge, tools)" name="requirements" value={form.requirements} onChange={handleInputChange} style={inputStyle} />
+                <input 
+                  placeholder="Requirements (e.g., prior knowledge, tools)" 
+                  name="requirements" 
+                  value={form.requirements} 
+                  onChange={handleInputChange} 
+                  style={inputStyle} 
+                />
 
                 <Select
                   name="difficulty"
@@ -843,56 +1279,6 @@ export default function ProjectCard() {
                   styles={customSelectStyle}
                   placeholder="Select difficulty level"
                 />
-
-                <input
-                  placeholder="Search users to add..."
-                  value={searchUser}
-                  onChange={(e) => setSearchUser(e.target.value)}
-                  style={{ ...inputStyle, marginBottom: "0.75rem" }}
-                />
-
-                <div style={{
-                  backgroundColor: "#1f1f26",
-                  padding: "0.75rem",
-                  borderRadius: "8px",
-                  maxHeight: "140px",
-                  overflowY: "auto",
-                  border: "1px solid #2a2a2f"
-                }}>
-                  {dummyUsers
-                    .filter((u) => u.username.toLowerCase().includes(searchUser.toLowerCase()))
-                    .map((user) => (
-                      <div key={user.id} style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        padding: "0.5rem 0",
-                        borderBottom: "1px solid #333"
-                      }}>
-                        <span style={{ fontSize: "0.95rem", color: "#ddd" }}>{user.username}</span>
-                        <button
-                          onClick={() => handleAddMember(user.username)}
-                          style={{
-                            backgroundColor: requestedMembers.includes(user.username) ? "#444" : "#a259ff",
-                            border: "none",
-                            borderRadius: "6px",
-                            padding: "5px 14px",
-                            color: "white",
-                            cursor: requestedMembers.includes(user.username) ? "default" : "pointer",
-                            fontSize: "0.8rem",
-                            fontWeight: "500"
-                          }}
-                          disabled={requestedMembers.includes(user.username)}
-                        >
-                          {requestedMembers.includes(user.username) ? "Request Sent" : "Request"}
-                        </button>
-                      </div>
-                    ))}
-                </div>
-
-                <div style={{ marginTop: "0.6rem", fontSize: "0.9rem", color: "#aaa" }}>
-                  Selected: {form.members.length > 0 ? form.members.join(", ") : "None"}
-                </div>
 
                 <button
                   onClick={handleSubmit}
@@ -927,7 +1313,6 @@ export default function ProjectCard() {
               Browse and join exciting development projects
             </p>
 
-            {/* Search and Filter Controls */}
             <div style={{ 
               display: "flex", 
               gap: "1rem", 
@@ -959,147 +1344,206 @@ export default function ProjectCard() {
               />
 
               <div style={{ color: "#888", fontSize: "0.9rem" }}>
-                {filteredProjects.length} projects found
+                {filteredAvailableProjects.length} projects found
               </div>
+
+              <button
+                onClick={fetchAvailableProjects}
+                disabled={loadingAvailable}
+                style={{
+                  backgroundColor: "#a259ff",
+                  border: "none",
+                  padding: "0.5rem 1rem",
+                  borderRadius: "6px",
+                  color: "white",
+                  cursor: loadingAvailable ? "not-allowed" : "pointer",
+                  fontSize: "0.8rem"
+                }}
+              >
+                {loadingAvailable ? "Refreshing..." : "Refresh"}
+              </button>
             </div>
 
-            {/* Projects Grid */}
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "1.5rem" }}>
-              {filteredProjects.map((project) => (
-                <div
-                  key={project.id}
-                  onClick={() => setSelectedProject(project)}
+            {loadingAvailable && (
+              <div style={{ 
+                textAlign: "center", 
+                color: "#a259ff", 
+                fontSize: "1.1rem", 
+                marginTop: "3rem" 
+              }}>
+                Loading available projects...
+              </div>
+            )}
+
+            {errorAvailable && (
+              <div style={{ 
+                textAlign: "center", 
+                color: "#ef4444", 
+                fontSize: "1rem", 
+                marginTop: "2rem",
+                padding: "1rem",
+                backgroundColor: "#2a1a1a",
+                borderRadius: "8px",
+                border: "1px solid #ef4444"
+              }}>
+                Error: {errorAvailable}
+                <br />
+                <button 
+                  onClick={fetchAvailableProjects}
                   style={{
-                    backgroundColor: "#16161a",
-                    border: "1px solid #2c2c34",
-                    borderRadius: "12px",
-                    width: "320px",
-                    padding: "1.5rem",
-                    transition: "all 0.3s ease",
-                    cursor: "pointer",
-                    position: "relative",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.boxShadow = "0 0 15px rgba(162, 89, 255, 0.4)";
-                    e.currentTarget.style.transform = "translateY(-2px)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.boxShadow = "none";
-                    e.currentTarget.style.transform = "translateY(0)";
+                    marginTop: "1rem",
+                    backgroundColor: "#a259ff",
+                    border: "none",
+                    padding: "0.5rem 1rem",
+                    borderRadius: "6px",
+                    color: "white",
+                    cursor: "pointer"
                   }}
                 >
-                  {/* Project Header */}
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1rem" }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ 
-                        fontWeight: "bold", 
-                        fontSize: "1.1rem", 
-                        marginBottom: "0.5rem", 
-                        color: "#a259ff" 
-                      }}>
-                        {project.title}
-                      </div>
-                      <div style={{ 
-                        fontSize: "0.85rem", 
-                        color: "#888",
-                        display: "flex",
-                        gap: "1rem"
-                      }}>
-                        <span>Status: {project.status}</span>
-                        <span>Updated: {project.updated}</span>
-                      </div>
-                    </div>
-                    
-                    <span
-                      style={{
-                        background: getDifficultyColor(project.difficulty),
-                        padding: "4px 8px",
-                        borderRadius: 6,
-                        fontSize: 11,
-                        fontWeight: "bold",
-                        color: "white",
-                      }}
-                    >
-                      {project.difficulty}
-                    </span>
-                  </div>
+                  Retry
+                </button>
+              </div>
+            )}
 
-                  {/* Project Description */}
-                  <div style={{ 
-                    fontSize: "0.9rem", 
-                    color: "#ccc", 
-                    marginBottom: "1rem",
-                    lineHeight: "1.4"
-                  }}>
-                    {project.description.substring(0, 120)}...
-                  </div>
-
-                  {/* Tech Stack */}
-                  <div style={{ marginBottom: "1rem" }}>
-                    <div style={{ fontSize: "0.8rem", color: "#a259ff", marginBottom: "0.5rem" }}>
-                      Tech Stack:
-                    </div>
-                    <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                      {project.techStack.slice(0, 3).map((tech, idx) => (
-                        <span
-                          key={idx}
-                          style={{
-                            background: "#2c2c34",
-                            padding: "2px 8px",
-                            borderRadius: 4,
-                            fontSize: 11,
-                            color: "#ddd",
-                          }}
-                        >
-                          {tech}
-                        </span>
-                      ))}
-                      {project.techStack.length > 3 && (
-                        <span style={{ fontSize: 11, color: "#888" }}>
-                          +{project.techStack.length - 3} more
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Members */}
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div style={{ fontSize: "0.8rem", color: "#888" }}>
-                      {project.members.length} member{project.members.length !== 1 ? 's' : ''}
-                    </div>
-                    
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleJoinRequest(project.id);
-                      }}
-                      disabled={joinRequests.includes(project.id)}
-                      style={{
-                        backgroundColor: joinRequests.includes(project.id) ? "#444" : "#a259ff",
-                        border: "none",
-                        borderRadius: "6px",
-                        padding: "6px 12px",
-                        color: "white",
-                        cursor: joinRequests.includes(project.id) ? "not-allowed" : "pointer",
-                        fontSize: "0.8rem",
-                        fontWeight: "500"
-                      }}
-                    >
-                      {joinRequests.includes(project.id) ? "Requested" : "Join"}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {filteredProjects.length === 0 && (
+            {!loadingAvailable && !errorAvailable && filteredAvailableProjects.length === 0 && (
               <div style={{ 
                 textAlign: "center", 
                 color: "#666", 
                 fontSize: "1.1rem", 
                 marginTop: "3rem" 
               }}>
-                No projects found matching your criteria.
+                {availableProjects.length === 0 
+                  ? "No projects available to join at the moment." 
+                  : "No projects found matching your criteria."
+                }
+              </div>
+            )}
+
+            {!loadingAvailable && !errorAvailable && filteredAvailableProjects.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "1.5rem" }}>
+                {filteredAvailableProjects.map((project) => (
+                  <div
+                    key={project.id}
+                    onClick={() => setSelectedProject(project)}
+                    style={{
+                      backgroundColor: "#16161a",
+                      border: "1px solid #2c2c34",
+                      borderRadius: "12px",
+                      width: "320px",
+                      padding: "1.5rem",
+                      transition: "all 0.3s ease",
+                      cursor: "pointer",
+                      position: "relative",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.boxShadow = "0 0 15px rgba(162, 89, 255, 0.4)";
+                      e.currentTarget.style.transform = "translateY(-2px)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.boxShadow = "none";
+                      e.currentTarget.style.transform = "translateY(0)";
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1rem" }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ 
+                          fontWeight: "bold", 
+                          fontSize: "1.1rem", 
+                          marginBottom: "0.5rem", 
+                          color: "#a259ff" 
+                        }}>
+                          {project.name || project.title}
+                        </div>
+                        <div style={{ 
+                          fontSize: "0.85rem", 
+                          color: "#888",
+                          display: "flex",
+                          gap: "1rem"
+                        }}>
+                          <span>Updated: {project.updated}</span>
+                        </div>
+                      </div>
+                      
+                      <span
+                        style={{
+                          background: getDifficultyColor(project.difficulty),
+                          padding: "4px 8px",
+                          borderRadius: 6,
+                          fontSize: 11,
+                          fontWeight: "bold",
+                          color: "white",
+                        }}
+                      >
+                        {project.difficulty}
+                      </span>
+                    </div>
+
+                    <div style={{ 
+                      fontSize: "0.9rem", 
+                      color: "#ccc", 
+                      marginBottom: "1rem",
+                      lineHeight: "1.4"
+                    }}>
+                      {project.description.length > 120 
+                        ? project.description.substring(0, 120) + "..." 
+                        : project.description
+                      }
+                    </div>
+
+                    <div style={{ marginBottom: "1rem" }}>
+                      <div style={{ fontSize: "0.8rem", color: "#a259ff", marginBottom: "0.5rem" }}>
+                        Tech Stack:
+                      </div>
+                      <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                        {project.techStack.slice(0, 3).map((tech, idx) => (
+                          <span
+                            key={idx}
+                            style={{
+                              background: "#2c2c34",
+                              padding: "2px 8px",
+                              borderRadius: 4,
+                              fontSize: 11,
+                              color: "#ddd",
+                            }}
+                          >
+                            {tech}
+                          </span>
+                        ))}
+                        {project.techStack.length > 3 && (
+                          <span style={{ fontSize: 11, color: "#888" }}>
+                            +{project.techStack.length - 3} more
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div style={{ fontSize: "0.8rem", color: "#888" }}>
+                        {project.members ? project.members.length : 0} member{(project.members?.length || 0) !== 1 ? 's' : ''}
+                      </div>
+                      
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleJoinRequest(project._id || project.id);
+                        }}
+                        disabled={sentJoinRequests.has(project._id || project.id)}
+                        style={{
+                          backgroundColor: sentJoinRequests.has(project._id || project.id) ? "#444" : "#a259ff",
+                          border: "none",
+                          borderRadius: "6px",
+                          padding: "6px 12px",
+                          color: "white",
+                          cursor: sentJoinRequests.has(project._id || project.id) ? "not-allowed" : "pointer",
+                          fontSize: "0.8rem",
+                          fontWeight: "500"
+                        }}
+                      >
+                        {sentJoinRequests.has(project._id || project.id) ? "Requested" : "Join"}
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </>
@@ -1112,17 +1556,20 @@ export default function ProjectCard() {
           project={selectedProject}
           onClose={() => setSelectedProject(null)}
           onJoinRequest={handleJoinRequest}
-          hasRequested={joinRequests.includes(selectedProject.id)}
+          hasRequested={sentJoinRequests.has(selectedProject._id || selectedProject.id)}
+          isRequestingJoin={isRequestingJoin}
         />
       )}
 
-      {showNotifications && (
-        <NotificationsModal
-          notifications={notifications}
-          onClose={() => setShowNotifications(false)}
-          onAccept={handleAcceptRequest}
-          onReject={handleRejectRequest}
-          onViewProfile={handleViewUserProfile} // This is the key connection
+      {joinRequestModalProject && (
+        <JoinRequestsModal
+          projectId={joinRequestModalProject.id}
+          isOpen={!!joinRequestModalProject}
+          onClose={() => setJoinRequestModalProject(null)}
+          onUpdate={() => {
+            fetchProjects();
+            fetchAvailableProjects();
+          }}
         />
       )}
     </div>
@@ -1132,12 +1579,15 @@ export default function ProjectCard() {
 // Common styles
 const inputStyle = {
   width: "100%",
-  padding: "0.5rem",
+  padding: "0.75rem",
   margin: "0.5rem 0",
-  borderRadius: "6px",
+  borderRadius: "8px",
   border: "1px solid #333",
   backgroundColor: "#16161a",
   color: "#fff",
+  fontSize: "0.95rem",
+  outline: "none",
+  transition: "border-color 0.3s",
 };
 
 const customSelectStyle = {
@@ -1151,12 +1601,13 @@ const customSelectStyle = {
     },
     color: "white",
     minWidth: "200px",
+    padding: "2px",
   }),
   menu: (base) => ({
     ...base,
     backgroundColor: "#16161a",
-    border: "none",
-    marginTop: 0,
+    border: "1px solid #333",
+    marginTop: 4,
     boxShadow: "0 4px 12px rgba(0,0,0,0.3)"
   }),
   menuList: (base) => ({
@@ -1164,18 +1615,19 @@ const customSelectStyle = {
     paddingTop: 0,
     paddingBottom: 0,
     backgroundColor: "#16161a",
-    borderTop: "1px solid #333",
-    borderBottom: "1px solid #333",
   }),
   option: (base, state) => ({
     ...base,
     backgroundColor: state.isSelected
-      ? "#2a2a2f"
+      ? "#a259ff"
       : state.isFocused
       ? "#2a2a2f"
       : "#16161a",
     color: "white",
     cursor: "pointer",
+    "&:hover": {
+      backgroundColor: "#2a2a2f",
+    }
   }),
   singleValue: (base) => ({
     ...base,
@@ -1196,5 +1648,13 @@ const customSelectStyle = {
       backgroundColor: "#a259ff",
       color: "white",
     },
+  }),
+  placeholder: (base) => ({
+    ...base,
+    color: "#888",
+  }),
+  input: (base) => ({
+    ...base,
+    color: "white",
   }),
 };

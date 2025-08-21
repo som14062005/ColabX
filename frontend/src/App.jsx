@@ -46,6 +46,7 @@ function App() {
           <Route path="/issues" element={<IssueBoard />} />
           <Route path="/code" element={<CodeEditor/>} />
           <Route path="/team-progress" element={<TeamProgress />} />
+          
         </Routes>
       </Router>
     </React.Fragment>
